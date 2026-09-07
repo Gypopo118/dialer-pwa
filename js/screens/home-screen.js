@@ -214,8 +214,8 @@ export function initHomeScreen({ contextMenu }) {
           <div class="recent-sub">
             <span class="call-arrow ${colorClass}">${arrow}</span>
             ${secondaryText ? `<span>${secondaryText}</span><span class="dot">·</span>` : ''}
-            ${icons.clock}
-            <span>${row.lastDurationSec > 0 ? formatDuration(row.lastDurationSec) : '—'}</span>
+            <span class="clock-ico">${icons.clock}</span>
+            <span class="dur">${row.lastDurationSec > 0 ? formatDuration(row.lastDurationSec) : '—'}</span>
           </div>
         </div>
         <div class="recent-meta">
