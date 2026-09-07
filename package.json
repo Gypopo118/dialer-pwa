@@ -10,7 +10,7 @@
     "open:android": "npx cap open android"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.1",
