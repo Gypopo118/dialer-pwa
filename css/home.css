@@ -215,13 +215,20 @@
 }
 .dial-input {
   flex: 1;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  outline: none;
   text-align: center;
   font-size: var(--fs-input);
   font-weight: 400;
   letter-spacing: 1px;
   color: var(--text-primary);
   caret-color: var(--accent-call);
-  min-width: 0;
+  user-select: text;
+  -webkit-user-select: text;
 }
 .dial-input::placeholder { color: var(--text-tertiary); font-size: 20px; }
 .backspace-btn {

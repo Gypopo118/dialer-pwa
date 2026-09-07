@@ -48,12 +48,80 @@ export function initHomeScreen({ contextMenu }) {
   }
 
   callLogAdapter.onChange(refreshRecents);
+  // После завершения любого звонка (успешного, missed, отклонённого) поле
+  // ввода очищается — номер уже есть в истории, держать его в поле не нужно.
+  let lastCallStatus = telephonyAdapter.getState().status;
+  telephonyAdapter.onStateChange((s) => {
+    if (lastCallStatus !== 'idle' && s.status === 'idle') {
+      uiStore.set({ dialInput: '' });
+    }
+    lastCallStatus = s.status;
+  });
   uiStore.subscribe((state) => {
-    dialInput.textContent = state.dialInput || '';
+    syncDialInput(state.dialInput || '');
     dialInput.classList.toggle('dial-input--empty', !state.dialInput);
     backspaceBtn.hidden = !state.dialInput;
     callBtn.toggleAttribute('disabled', !state.dialInput);
   });
+  dialInput.value = uiStore.get().dialInput || '';
+
+  // ===== Поле ввода — настоящий <input> с курсором =====
+  // Тап ставит курсор между цифрами, свайп влево/вправо двигает его.
+  // inputmode="none" подавляет системную клавиатуру — набор идёт своей.
+  // lastCaret помнит позицию: тап по кнопкам уводит фокус с поля,
+  // а вставка/удаление должны идти там, где стоял курсор, а не в конце.
+  let lastCaret = null;
+  function rememberCaret() {
+    try {
+      lastCaret = {
+        start: dialInput.selectionStart ?? dialInput.value.length,
+        end: dialInput.selectionEnd ?? dialInput.value.length,
+      };
+    } catch (_) { /* noop */ }
+  }
+  function effectiveCaret() {
+    if (document.activeElement === dialInput) rememberCaret();
+    const len = (uiStore.get().dialInput || '').length;
+    if (!lastCaret) return { start: len, end: len };
+    return {
+      start: Math.max(0, Math.min(lastCaret.start, len)),
+      end: Math.max(0, Math.min(lastCaret.end, len)),
+    };
+  }
+  function syncDialInput(value) {
+    if (dialInput.value === value) return;
+    dialInput.value = value;
+  }
+  function placeCaret(pos) {
+    const p = Math.max(0, Math.min(pos, dialInput.value.length));
+    lastCaret = { start: p, end: p };
+    dialInput.focus({ preventScroll: true });
+    try { dialInput.setSelectionRange(p, p); } catch (_) { /* noop */ }
+  }
+  dialInput.addEventListener('input', () => {
+    rememberCaret();
+    if (dialInput.value !== uiStore.get().dialInput) uiStore.set({ dialInput: dialInput.value });
+  });
+  dialInput.addEventListener('click', rememberCaret);
+  dialInput.addEventListener('keyup', rememberCaret);
+  dialInput.addEventListener('select', rememberCaret);
+  // Свайп по полю ввода двигает курсор (работает и без системной клавиатуры).
+  let swipeX = null, swipeY = null, swipeCaret = 0;
+  dialInput.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    swipeX = t.clientX; swipeY = t.clientY;
+    swipeCaret = effectiveCaret().start;
+  }, { passive: true });
+  dialInput.addEventListener('touchend', (e) => {
+    if (swipeX === null) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipeX, dy = t.clientY - swipeY;
+    swipeX = null;
+    if (Math.abs(dx) > 24 && Math.abs(dy) < 40) {
+      const steps = Math.max(-10, Math.min(10, Math.round(dx / 28)));
+      placeCaret(swipeCaret + steps);
+    }
+  }, { passive: true });
 
   refreshRecents();
 
@@ -76,9 +144,18 @@ export function initHomeScreen({ contextMenu }) {
   }
 
   // ===== Поле ввода =====
+  // Удаление идёт в позиции курсора (или выделенного фрагмента),
+  // а не всегда с конца — можно вырезать лишнюю цифру из середины.
   backspaceBtn.addEventListener('click', () => {
-    const cur = uiStore.get().dialInput;
-    uiStore.set({ dialInput: cur.slice(0, -1) });
+    const cur = uiStore.get().dialInput || '';
+    const { start, end } = effectiveCaret();
+    if (end !== start) {
+      uiStore.set({ dialInput: cur.slice(0, start) + cur.slice(end) });
+      placeCaret(start);
+    } else if (start > 0) {
+      uiStore.set({ dialInput: cur.slice(0, start - 1) + cur.slice(start) });
+      placeCaret(start - 1);
+    }
   });
   let bsTimer = null;
   backspaceBtn.addEventListener('touchstart', () => {
@@ -115,14 +192,28 @@ export function initHomeScreen({ contextMenu }) {
     });
 
     keypadEl.querySelectorAll('.key[data-digit]').forEach((key) => {
-      key.addEventListener('click', () => appendDigit(key.dataset.digit));
+      key.addEventListener('click', () => {
+        // Долгое нажатие «0» уже вставило «+» — повторный клик пропускаем.
+        if (key.dataset.digit === '0' && Date.now() - zeroLongFired < 700) return;
+        appendDigit(key.dataset.digit);
+      });
     });
     let longPressTimer = null;
+    let zeroLongFired = 0;
     const zeroKey = keypadEl.querySelector('.key[data-digit="0"]');
     zeroKey.addEventListener('touchstart', () => {
       longPressTimer = setTimeout(() => {
-        const cur = uiStore.get().dialInput;
-        uiStore.set({ dialInput: cur.slice(0, -1) + '+' });
+        // Долгое нажатие «0» меняет ноль перед курсором на «+».
+        zeroLongFired = Date.now();
+        const cur = uiStore.get().dialInput || '';
+        const { start, end } = effectiveCaret();
+        if (end !== start) {
+          uiStore.set({ dialInput: cur.slice(0, start) + '+' + cur.slice(end) });
+          placeCaret(start + 1);
+        } else if (start > 0 && cur[start - 1] === '0') {
+          uiStore.set({ dialInput: cur.slice(0, start - 1) + '+' + cur.slice(start) });
+          placeCaret(start);
+        }
       }, 500);
     }, { passive: true });
     zeroKey.addEventListener('touchend', () => clearTimeout(longPressTimer));
@@ -134,7 +225,7 @@ export function initHomeScreen({ contextMenu }) {
       window.dispatchEvent(new CustomEvent('dialer:add-contact-blank'));
     });
     keypadEl.querySelector('[data-side="plus"]').addEventListener('click', () => appendDigit('+'));
-    keypadEl.querySelector('[data-side="clear"]').addEventListener('click', () => uiStore.set({ dialInput: '' }));
+    keypadEl.querySelector('[data-side="clear"]').addEventListener('click', () => { uiStore.set({ dialInput: '' }); lastCaret = { start: 0, end: 0 }; });
   }
 
   function sideIconFor(name) {
@@ -146,8 +237,10 @@ export function initHomeScreen({ contextMenu }) {
   }
 
   function appendDigit(d) {
-    const cur = uiStore.get().dialInput;
-    uiStore.set({ dialInput: cur + d });
+    const cur = uiStore.get().dialInput || '';
+    const { start, end } = effectiveCaret();
+    uiStore.set({ dialInput: cur.slice(0, start) + d + cur.slice(end) });
+    placeCaret(start + d.length);
     showKeyboard();
   }
 
