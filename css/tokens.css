@@ -1,0 +1,62 @@
+/*
+  Дизайн-токены "Звонилки".
+  Палитра и пропорции зафиксированы по ТЗ — не менять без явного запроса.
+*/
+:root {
+  /* Цвета */
+  --bg: #0A0A0A;
+  --bg-elevated: #131314;
+  --surface-1: #1B1B1D;      /* карточки строк истории */
+  --surface-2: #201F22;      /* базовый графит клавиш */
+  --surface-2-top: #29282C;  /* световой градиент сверху клавиши */
+  --surface-2-pressed: #17171A;
+  --hairline: rgba(255, 255, 255, 0.06);
+
+  --text-primary: #F5F5F7;
+  --text-secondary: #9A9CA3;
+  --text-tertiary: #6C6E75;
+
+  --call-outgoing: #34C77B;
+  --call-incoming: #3D8BFD;
+  --call-missed: #FF5B54;
+
+  --accent-call: #2FCE5C;
+  --accent-call-pressed: #26A94B;
+  --danger: #FF453A;
+
+  /* Радиусы */
+  --radius-row: 18px;
+  --radius-key: 20px;
+  --radius-key-sm: 14px;
+  --radius-pill: 999px;
+  --radius-sheet: 24px;
+
+  /* Тени — единая система глубины */
+  --shadow-key:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 -6px 10px rgba(0, 0, 0, 0.35) inset,
+    0 8px 14px rgba(0, 0, 0, 0.45);
+  --shadow-key-pressed:
+    0 -2px 4px rgba(0, 0, 0, 0.5) inset,
+    0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  --shadow-row: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-call-btn:
+    0 1px 0 rgba(255, 255, 255, 0.18) inset,
+    0 10px 22px rgba(47, 206, 92, 0.35);
+
+  /* Типографика — системный стек Android (Roboto уже на устройстве) */
+  --font: "Roboto", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  --fs-input: 40px;
+  --fs-key: 26px;
+  --fs-key-sub: 11px;
+  --fs-title: 20px;
+  --fs-body: 16px;
+  --fs-secondary: 13px;
+  --fs-micro: 11px;
+
+  /* Компоновка */
+  --dial-block-height: 39%; /* строго в пределах "чуть больше трети", не более ~40% с полем ввода */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+}

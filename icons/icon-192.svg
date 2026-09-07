@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="192" height="192">
+  <defs>
+    <radialGradient id="bg" cx="35%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#242427"/>
+      <stop offset="100%" stop-color="#0A0A0A"/>
+    </radialGradient>
+    <linearGradient id="phone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3DDC6F"/>
+      <stop offset="100%" stop-color="#22A34E"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <g transform="translate(256,256) rotate(-45) translate(-256,-256)">
+    <path d="M180 150c8-16 26-24 42-16l38 18c14 7 20 24 14 39l-14 34c-3 8-2 17 3 24 18 26 42 50 68 68 7 5 16 6 24 3l34-14c15-6 32 0 39 14l18 38c8 16 0 34-16 42-70 34-158 6-214-50-56-56-84-144-50-214 4-8 9-15 14-20z" fill="url(#phone)"/>
+  </g>
+</svg>

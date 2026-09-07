@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Звонилка</title>
+<meta name="theme-color" content="#0A0A0A">
+<meta name="description" content="Премиальный тёмный диалер для Android">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/home.css">
+<link rel="stylesheet" href="css/sheets.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ===================== ГЛАВНЫЙ ЭКРАН: недавние + набор ===================== -->
+  <section id="screen-home" class="screen">
+    <div class="home">
+
+      <div class="search-bar" id="search-bar" hidden>
+        <span class="icon-btn" id="search-icon" style="width:20px;height:20px;color:var(--text-tertiary)"></span>
+        <input id="search-input" type="text" placeholder="Имя или номер" autocomplete="off">
+        <button class="icon-btn" id="search-close" aria-label="Закрыть поиск">✕</button>
+      </div>
+
+      <div class="recents" id="recents"></div>
+
+      <button class="keyboard-peek" id="keyboard-peek" hidden>Клавиатура</button>
+
+      <div class="dial-block" id="dial-block">
+        <div class="dial-input-row">
+          <div class="dial-input" id="dial-input"></div>
+          <button class="backspace-btn" id="backspace-btn" hidden aria-label="Удалить символ"></button>
+        </div>
+        <div class="keypad" id="keypad"></div>
+        <button class="call-btn" id="call-btn" disabled aria-label="Позвонить"></button>
+      </div>
+
+    </div>
+    <!-- Скрытая кнопка-триггер поиска, вызывается из бокового столбца клавиатуры -->
+    <button id="search-toggle" hidden aria-hidden="true"></button>
+  </section>
+
+  <!-- ===================== ЭКРАН: история звонков контакта ===================== -->
+  <section id="screen-contact-history" class="screen" hidden></section>
+
+  <!-- ===================== ЭКРАН ЗВОНКА ===================== -->
+  <div id="call-screen" class="call-screen"></div>
+
+  <!-- ===================== Затемнение + контекстное меню ===================== -->
+  <div id="scrim" class="scrim"></div>
+  <div id="context-sheet" class="context-sheet"></div>
+
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

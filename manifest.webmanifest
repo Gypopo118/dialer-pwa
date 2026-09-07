@@ -1,0 +1,26 @@
+{
+  "name": "Звонилка",
+  "short_name": "Звонилка",
+  "description": "Премиальный тёмный диалер для Android: клавиатура, недавние звонки, контакты Google.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0A0A0A",
+  "theme_color": "#0A0A0A",
+  "lang": "ru",
+  "categories": ["utilities", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Новый звонок",
+      "short_name": "Набор",
+      "url": "./index.html?screen=dialer",
+      "description": "Открыть клавиатуру набора номера"
+    }
+  ]
+}

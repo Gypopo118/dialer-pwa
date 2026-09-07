@@ -1,0 +1,90 @@
+name: PWA CI + Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate PWA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check manifest JSON
+        run: node -e "const m=JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8')); if(!m.icons||!m.icons.length) throw new Error('no icons'); console.log('icons:', m.icons.map(i=>i.src+' '+i.sizes).join(', '))"
+
+      - name: Check PWA icons exist + PNG sizes
+        run: |
+          node -e "
+            const fs=require('fs');
+            function pngSize(f){const b=fs.readFileSync(f); if(b[0]!==0x89||b[1]!==0x50) throw new Error(f+' not PNG'); return [b.readUInt32BE(16),b.readUInt32BE(20)];}
+            const need={'icons/icon-192.png':[192,192],'icons/icon-512.png':[512,512],'icons/maskable-512.png':[512,512],'icons/apple-touch-icon.png':null};
+            for(const [f,size] of Object.entries(need)){ if(!fs.existsSync(f)) throw new Error('missing '+f); const s=pngSize(f); console.log(f+': '+s[0]+'x'+s[1]); if(size&&(s[0]!==size[0]||s[1]!==size[1])) throw new Error(f+' wrong size'); }
+            console.log('icons OK');
+          "
+
+      - name: Check JS syntax
+        run: |
+          for f in $(find js service-worker.js -name '*.js'); do node --check "$f" || exit 1; done
+          echo "js OK"
+
+      - name: Check service-worker cache list
+        run: |
+          node -e "
+            const fs=require('fs');
+            const sw=fs.readFileSync('service-worker.js','utf8');
+            const files=[...sw.matchAll(/'\.\/([^']+)'/g)].map(x=>x[1]);
+            const miss=files.filter(f=>!fs.existsSync(f));
+            if(miss.length){ console.error('missing in SW:', miss.join(',')); process.exit(1); }
+            console.log('SW cache OK:', files.length, 'files');
+          "
+
+  deploy-pages:
+    name: Deploy to GitHub Pages
+    if: github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  # --- Cloudflare Pages (опционально, через Secrets) ---
+  # В Cloudflare Dashboard проще: Pages -> Connect to Git -> выбрать этот репозиторий,
+  # Build command: (пусто), Output: / . Либо раскомментируйте ниже и добавьте Secrets:
+  # CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_PROJECT_NAME
+  # deploy-cloudflare:
+  #   name: Deploy to Cloudflare Pages
+  #   if: github.ref == 'refs/heads/main'
+  #   needs: validate
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: cloudflare/wrangler-action@v3
+  #       with:
+  #         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  #         accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  #         command: pages deploy . --project-name=${{ secrets.CLOUDFLARE_PROJECT_NAME }} --commit-dirty=true

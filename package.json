@@ -1,0 +1,12 @@
+{
+  "name": "dialer-pwa",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Звонилка — премиальный тёмный Android-диалер. PWA-прототип, подготовленный к сборке в APK (Capacitor).",
+  "scripts": {
+    "start": "npx http-server . -p 8080 -c-1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
