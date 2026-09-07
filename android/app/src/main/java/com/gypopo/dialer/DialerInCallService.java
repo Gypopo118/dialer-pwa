@@ -1,7 +1,6 @@
 package com.gypopo.dialer;
 
 import android.net.Uri;
-import android.os.Bundle;
 import android.telecom.Call;
 import android.telecom.CallAudioState;
 import android.telecom.InCallService;
@@ -145,7 +144,7 @@ public class DialerInCallService extends InCallService {
         }
     }
 
-    static boolean setMuted(boolean muted) {
+    static boolean setMicMuted(boolean muted) {
         if (instance == null) return false;
         try {
             instance.setMuted(muted);
@@ -160,14 +159,5 @@ public class DialerInCallService extends InCallService {
         super.onBringToForeground(showDialpad);
         // Система просит показать UI звонка — WebView уже отображает
         // экран звонка по событию telecomEvent; отдельных действий не нужно.
-    }
-
-    @Override
-    public void onSilenceIncomingCall(String reason) {
-        super.onSilenceIncomingCall(reason);
-        Bundle extras = new Bundle();
-        JSObject data = new JSObject();
-        data.put("event", "silenced");
-        DialerTelecomPlugin.emit("telecomEvent", data);
     }
 }

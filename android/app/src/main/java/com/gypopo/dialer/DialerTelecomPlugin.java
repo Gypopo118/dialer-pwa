@@ -218,7 +218,7 @@ public class DialerTelecomPlugin extends Plugin {
     @PluginMethod
     public void setMicMuted(PluginCall call) {
         boolean muted = Boolean.TRUE.equals(call.getBoolean("muted", false));
-        if (DialerInCallService.setMuted(muted)) {
+        if (DialerInCallService.setMicMuted(muted)) {
             JSObject ret = new JSObject();
             ret.put("micMuted", muted);
             call.resolve(ret);
