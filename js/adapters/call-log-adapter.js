@@ -15,6 +15,7 @@
 // ============================================================================
 
 import { mockCallLog } from '../mock-data.js';
+import { nativeBridge } from './native-bridge.js';
 
 const STORAGE_KEY = 'dialer.calllog.v1';
 const listeners = new Set();
@@ -42,22 +43,33 @@ function notify() {
 }
 
 export const callLogAdapter = {
-  // TODO(native): заменить на CallLog.Calls query, сортировка по DATE DESC.
+  // В APK читаем системный CallLog (там же лежат звонки с SIM). В браузере — моки.
   async getEntries() {
+    const sys = await nativeBridge.getCallLog(200);
+    if (sys && Array.isArray(sys.entries)) {
+      return sys.entries.map((e) => ({
+        id: e.id,
+        number: e.number || '',
+        type: e.type,
+        durationSec: e.durationSec || 0,
+        timestamp: new Date(e.timestamp),
+      }));
+    }
     return [...entries].sort((a, b) => b.timestamp - a.timestamp);
   },
 
   async getEntriesForNumber(number) {
     const norm = number.replace(/[^\d+]/g, '');
-    return entries
-      .filter((e) => e.number.replace(/[^\d+]/g, '') === norm)
+    const all = await this.getEntries();
+    return all
+      .filter((e) => (e.number || '').replace(/[^\d+]/g, '') === norm)
       .sort((a, b) => b.timestamp - a.timestamp);
   },
 
-  // Добавление записи после завершения звонка (мок-телефония вызывает это
-  // из telephony-adapter.js). В нативной версии запись появляется в
-  // CallLog автоматически через систему — этот метод тогда не нужен.
+  // Добавление записи после завершения звонка. В APK запись появляется
+  // в системном CallLog автоматически — сюда писать не нужно.
   async appendEntry({ number, type, durationSec }) {
+    if (await nativeBridge.isAvailable()) return null;
     entries.push({
       id: `call-${Date.now()}`,
       number,
@@ -77,6 +89,12 @@ export const callLogAdapter = {
   },
 
   // TODO(native): подписка на ContentObserver CallLog вместо ручного notify().
+  // Вызывается телефонией, когда InCallService сообщает о конце звонка:
+  // системный лог уже обновлён, нужно только перерисовать список.
+  refreshFromSystem() {
+    notify();
+  },
+
   onChange(callback) {
     listeners.add(callback);
     return () => listeners.delete(callback);

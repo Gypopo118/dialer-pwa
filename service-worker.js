@@ -19,6 +19,7 @@ const SHELL_FILES = [
   './js/adapters/contacts-adapter.js',
   './js/adapters/call-log-adapter.js',
   './js/adapters/telephony-adapter.js',
+  './js/adapters/native-bridge.js',
   './js/screens/home-screen.js',
   './js/screens/contact-history-screen.js',
   './js/screens/call-screen.js',

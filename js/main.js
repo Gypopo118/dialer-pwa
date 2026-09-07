@@ -3,6 +3,8 @@ import { initContactHistoryScreen } from './screens/contact-history-screen.js';
 import { initCallScreen } from './screens/call-screen.js';
 import { initContextMenu } from './components/context-menu.js';
 import { contactsAdapter } from './adapters/contacts-adapter.js';
+import { nativeBridge } from './adapters/native-bridge.js';
+import { initNativeTelephony } from './adapters/telephony-adapter.js';
 import { uiStore } from './store.js';
 
 // История в браузере используется как стек "назад" (см. utils/back-stack.js).
@@ -41,10 +43,29 @@ window.addEventListener('dialer:add-contact-blank', async () => {
   }
 });
 
-// ===== Первый запуск: попытка импорта контактов устройства =====
-// TODO(native): после сборки в APK — здесь же запрашивать READ_CONTACTS и
-// реально читать контакты/фото из Google-аккаунта пользователя.
+// ===== Первый запуск: нативный режим (APK) или моки (PWA) =====
+// В APK: подписываемся на события Telecom, импортируем контакты устройства
+// и просим назначить приложение диалером по умолчанию (системный диалог).
 (async function onFirstLaunch() {
+  try {
+    const native = await initNativeTelephony();
+    if (native) {
+      await contactsAdapter.syncFromDevice();
+      home.refreshRecents();
+      const FLAG = 'dialer.roleAsked';
+      if (!localStorage.getItem(FLAG)) {
+        localStorage.setItem(FLAG, '1');
+        try {
+          const st = await nativeBridge.isDefaultDialer();
+          if (!st.isDefault) await nativeBridge.requestDefaultDialerRole();
+        } catch (_) { /* пользователь отказался — спросим позже из настроек */ }
+      }
+      return;
+    }
+  } catch (e) {
+    console.warn('[dialer] native init failed, fallback to mocks:', e);
+  }
+  // Браузерный PWA: моки (прежнее поведение).
   const FLAG = 'dialer.firstLaunchDone';
   if (localStorage.getItem(FLAG)) return;
   localStorage.setItem(FLAG, '1');

@@ -66,9 +66,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Prepare web bundle
+        run: node scripts/copy-web.js
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: www
       - id: deployment
         uses: actions/deploy-pages@v4
 

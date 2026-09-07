@@ -4,9 +4,17 @@
   "private": true,
   "description": "Звонилка — премиальный тёмный Android-диалер. PWA-прототип, подготовленный к сборке в APK (Capacitor).",
   "scripts": {
-    "start": "npx http-server . -p 8080 -c-1"
+    "start": "npx http-server . -p 8080 -c-1",
+    "build:web": "node scripts/copy-web.js",
+    "build": "npm run build:web && npx cap sync android",
+    "open:android": "npx cap open android"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/cli": "^8.5.1",
+    "@capacitor/core": "^8.5.1"
   }
 }

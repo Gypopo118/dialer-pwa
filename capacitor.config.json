@@ -1,0 +1,10 @@
+{
+  "appId": "com.gypopo.dialer",
+  "appName": "Звонилка",
+  "webDir": "www",
+  "backgroundColor": "#0A0A0A",
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {}
+}

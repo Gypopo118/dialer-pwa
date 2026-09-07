@@ -1,6 +1,14 @@
 node_modules/
+www/
 .DS_Store
 Thumbs.db
 .codegraph/
 .omo/
 *.log
+# Capacitor / Android generated
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/app/src/main/assets/
+android/capacitor-cordova-android-plugins/

@@ -18,6 +18,7 @@
 // ============================================================================
 
 import { mockContacts } from '../mock-data.js';
+import { nativeBridge } from './native-bridge.js';
 
 const STORAGE_KEY = 'dialer.contacts.v1';
 
@@ -38,22 +39,38 @@ function saveStore(list) {
 let contacts = loadStore();
 
 export const contactsAdapter = {
-  // TODO(native): заменить на чтение из ContactsContract / People API.
+  // В APK — контакты устройства (включая синхронизированные Google).
+  // В браузере — локальные моки.
   async getAll() {
+    const sys = await nativeBridge.getContacts();
+    if (sys && Array.isArray(sys.contacts)) {
+      return sys.contacts
+        .filter((c) => c.number)
+        .map((c) => ({
+          id: c.id,
+          name: c.name || c.number,
+          numbers: [c.number],
+          photoUrl: c.photoUri || null,
+          source: 'device',
+        }));
+    }
     return contacts.map((c) => ({ ...c }));
   },
 
   async findByNumber(number) {
     const norm = number.replace(/[^\d+]/g, '');
-    return contacts.find((c) => c.numbers.some((n) => n.replace(/[^\d+]/g, '') === norm)) || null;
+    const all = await this.getAll();
+    return all.find((c) => (c.numbers || []).some((n) => (n || '').replace(/[^\d+]/g, '') === norm)) || null;
   },
 
   async search(query) {
     const q = query.trim().toLowerCase();
     if (!q) return [];
-    return contacts.filter((c) =>
-      c.name.toLowerCase().includes(q) ||
-      c.numbers.some((n) => n.replace(/[^\d+]/g, '').includes(q.replace(/[^\d+]/g, '')))
+    const nq = q.replace(/[^\d+]/g, '');
+    const all = await this.getAll();
+    return all.filter((c) =>
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.numbers || []).some((n) => (n || '').replace(/[^\d+]/g, '').includes(nq))
     );
   },
 
@@ -86,12 +103,32 @@ export const contactsAdapter = {
     saveStore(contacts);
   },
 
-  // TODO(native): вызывается при первом запуске приложения (после выдачи
-  // разрешения READ_CONTACTS) либо вручную из настроек ("Импортировать
-  // контакты Google"). Должен смёржить нативный список с локальным.
+  // В APK импортирует контакты устройства в локальный стор (смёржить по номеру).
+  // Прямая запись в Google-аккаунт — следующий шаг (People API + OAuth).
   async syncFromDevice() {
-    console.info('[contactsAdapter] syncFromDevice: заглушка. ' +
-      'В нативной сборке — запрос READ_CONTACTS и чтение через People API.');
-    return { imported: 0 };
+    const sys = await nativeBridge.getContacts();
+    if (!sys || !Array.isArray(sys.contacts)) {
+      console.info('[contactsAdapter] syncFromDevice: нативного слоя нет, пропуск.');
+      return { imported: 0 };
+    }
+    const known = new Set();
+    contacts.forEach((c) => (c.numbers || []).forEach((n) => known.add((n || '').replace(/[^\d+]/g, ''))));
+    let imported = 0;
+    for (const dc of sys.contacts) {
+      if (!dc.number) continue;
+      const norm = (dc.number || '').replace(/[^\d+]/g, '');
+      if (!norm || known.has(norm)) continue;
+      known.add(norm);
+      contacts.push({
+        id: dc.id || `device-${Date.now()}-${imported}`,
+        name: dc.name || dc.number,
+        numbers: [dc.number],
+        photoUrl: dc.photoUri || null,
+        source: 'device',
+      });
+      imported++;
+    }
+    saveStore(contacts);
+    return { imported };
   },
 };

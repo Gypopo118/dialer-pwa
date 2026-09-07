@@ -1,0 +1,49 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Validate PWA shell
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8')); console.log('manifest OK')"
+          for f in $(find js service-worker.js scripts -name '*.js'); do node --check "$f" || exit 1; done
+          echo "js OK"
+
+      - name: Build web + sync Capacitor
+        run: |
+          npm ci
+          npm run build
+
+      - name: Assemble debug APK
+        run: |
+          chmod +x android/gradlew
+          (cd android && ./gradlew assembleDebug --no-daemon)
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: dialer-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
