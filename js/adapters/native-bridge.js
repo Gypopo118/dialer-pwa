@@ -79,6 +79,16 @@ export const nativeBridge = {
     return getPlugin().setMicMuted({ muted: !!muted });
   },
 
+  async openContactEditor({ name = '', number = '' } = {}) {
+    const p = getPlugin();
+    if (!p) return null;
+    try {
+      return await p.openContactEditor({ name, number });
+    } catch (_) {
+      return null;
+    }
+  },
+
   async getContacts() {
     const p = getPlugin();
     if (!p) return null;

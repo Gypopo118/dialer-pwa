@@ -229,6 +229,34 @@ public class DialerTelecomPlugin extends Plugin {
 
     // ---------- contacts (ContactsContract: включает синхронизированные Google-контакты) ----------
 
+    // Открывает системный редактор контактов с предзаполненными полями.
+    // Пользователь сам выбирает аккаунт (обычно Google) и сохраняет —
+    // контакт сразу виден приложению через ContactsContract.
+    @PluginMethod
+    public void openContactEditor(PluginCall call) {
+        String name = call.getString("name", "");
+        String number = call.getString("number", "");
+        try {
+            Intent intent = new Intent(Intent.ACTION_INSERT, ContactsContract.Contacts.CONTENT_URI);
+            if (name != null && !name.isEmpty()) {
+                intent.putExtra(ContactsContract.Intents.Insert.NAME, name);
+            }
+            if (number != null && !number.isEmpty()) {
+                intent.putExtra(ContactsContract.Intents.Insert.PHONE, number);
+            }
+            startActivityForResult(call, intent, "onContactEditorFinished");
+        } catch (Exception e) {
+            call.reject("contact editor failed: " + e.getMessage());
+        }
+    }
+
+    @ActivityCallback
+    private void onContactEditorFinished(PluginCall call, ActivityResult result) {
+        JSObject ret = new JSObject();
+        ret.put("saved", result.getResultCode() == Activity.RESULT_OK);
+        call.resolve(ret);
+    }
+
     @PluginMethod
     public void getContacts(PluginCall call) {
         if (getPermissionState("contacts") != PermissionState.GRANTED) {

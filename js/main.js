@@ -19,7 +19,8 @@ const contactHistoryScreen = initContactHistoryScreen({
   onContactChanged: () => home.refreshRecents(),
 });
 
-// Форма нового контакта вместо window.prompt(): поле имени сразу в фокусе.
+// Форма нового контакта — только запасной вариант для браузера (PWA).
+// В APK открывается системный редактор (контакт сразу в Google/телефоне).
 const contactForm = initContactForm({
   onSaved: async ({ name, number }) => {
     await contactsAdapter.create({ name, number });
@@ -28,10 +29,26 @@ const contactForm = initContactForm({
   },
 });
 
+// Создание контакта: в APK — системный редактор Android (сохранение
+// в выбранный аккаунт, обычно Google), в браузере — локальная форма.
+async function openAddContact({ name = '', number = '', numberEditable = false } = {}) {
+  try {
+    if (await nativeBridge.isAvailable()) {
+      await nativeBridge.openContactEditor({ name, number });
+      home.refreshRecents();
+      contactHistoryScreen.refresh();
+      return;
+    }
+  } catch (_) {
+    // noop — падаем на локальную форму
+  }
+  contactForm.open({ name, number, numberEditable, title: 'Новый контакт' });
+}
+
 const contextMenu = initContextMenu({
   onOpenHistory: (row) => contactHistoryScreen.open(row),
   onOpenAddContact: (row) => {
-    contactForm.open({ name: '', number: row.number, numberEditable: false, title: 'Новый контакт' });
+    openAddContact({ name: '', number: row.number, numberEditable: false });
   },
   onOpenEditContact: (row) => contactHistoryScreen.open(row),
   onChanged: () => home.refreshRecents(),
@@ -51,13 +68,30 @@ const contactListScreen = initContactListScreen({
 window.addEventListener('dialer:open-contacts', () => contactListScreen.open());
 
 window.addEventListener('dialer:add-contact-blank', (e) => {
-  contactForm.open({
+  openAddContact({
     name: '',
     number: (e.detail && e.detail.number) || uiStore.get().dialInput || '',
     numberEditable: true,
-    title: 'Новый контакт',
   });
 });
+
+// Возврат из системного редактора контактов: обновить списки.
+// Это и есть «автоопрос» — свежие данные при каждом возврате в приложение.
+(async function initResumeRefresh() {
+  try {
+    const cap = window.Capacitor;
+    if (!cap || typeof cap.isNativePlatform !== 'function' || !cap.isNativePlatform()) return;
+    const App = (cap.Plugins && cap.Plugins.App)
+      || (typeof cap.registerPlugin === 'function' ? cap.registerPlugin('App') : null);
+    if (!App || typeof App.addListener !== 'function') return;
+    await App.addListener('resume', () => {
+      home.refreshRecents();
+      contactHistoryScreen.refresh();
+    });
+  } catch (_) {
+    // noop
+  }
+})();
 
 // ===== Первый запуск: нативный режим (APK) или моки (PWA) =====
 // В APK: подписываемся на события Telecom, импортируем контакты устройства
