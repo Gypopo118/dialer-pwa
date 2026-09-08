@@ -22,6 +22,27 @@ export function layerDepth() {
   return stack.length;
 }
 
+// Детерминированно закрывает верхний слой: сразу вызывает его onPop
+// и откатывает history для синхронизации. Не ждёт popstate — поэтому
+// неуязвимо к таймингам доставки события в WebView.
+export function closeTopLayer() {
+  const layer = stack[stack.length - 1];
+  if (!layer) return false;
+  stack.pop();
+  ignoreNextPopstate = true;
+  try {
+    history.back();
+  } catch (_) {
+    // noop
+  }
+  try {
+    layer.onPop();
+  } catch (_) {
+    // noop
+  }
+  return true;
+}
+
 // Аппаратная кнопка «назад» в нативной оболочке (Capacitor): ведёт себя
 // как жест — закрывает верхний слой через history. На корневом экране
 // приложение не закрывается, а сворачивается.
@@ -33,14 +54,11 @@ export async function initNativeBackButton() {
       || (typeof cap.registerPlugin === 'function' ? cap.registerPlugin('App') : null);
     if (!App || typeof App.addListener !== 'function') return false;
     await App.addListener('backButton', () => {
-      if (layerDepth() > 0) {
-        history.back();
-      } else {
-        try {
-          App.minimizeApp();
-        } catch (_) {
-          // noop
-        }
+      if (closeTopLayer()) return;
+      try {
+        App.minimizeApp();
+      } catch (_) {
+        // noop
       }
     });
     return true;

@@ -134,9 +134,21 @@ export function initHomeScreen({ contextMenu, onOpenContact }) {
   refreshRecents();
 
   // ===== Строка поиска =====
+  // Dial-клавиатура на время поиска уходит под системную (не перекрывает
+  // экран) и возвращается при закрытии поиска. У поиска свой слой —
+  // «назад» сначала закрывает поиск, а не сворачивает приложение.
+  const SEARCH_LAYER = 'search';
+  let searchHadKeyboard = false;
+  let searchHadPeek = false;
   document.getElementById('search-toggle').addEventListener('click', () => {
+    if (uiStore.get().searchOpen) return;
     uiStore.set({ searchOpen: true });
+    searchHadKeyboard = uiStore.get().keyboardVisible;
+    searchHadPeek = !keyboardPeek.hidden && !searchHadKeyboard;
+    hideKeyboard();
+    keyboardPeek.hidden = true;
     searchBar.hidden = false;
+    pushLayer(SEARCH_LAYER, () => closeSearch(true));
     searchInput.focus();
   });
   searchInput.addEventListener('input', () => {
@@ -144,11 +156,19 @@ export function initHomeScreen({ contextMenu, onOpenContact }) {
     renderRecents();
   });
   document.getElementById('search-close').addEventListener('click', closeSearch);
-  function closeSearch() {
+  function closeSearch(viaGesture) {
+    if (!uiStore.get().searchOpen) return;
     uiStore.set({ searchOpen: false, searchQuery: '' });
     searchInput.value = '';
     searchBar.hidden = true;
+    if (!viaGesture) popLayerSilently(SEARCH_LAYER);
     renderRecents();
+    if (searchHadKeyboard) {
+      searchHadKeyboard = false;
+      showKeyboard();
+    } else {
+      keyboardPeek.hidden = !searchHadPeek;
+    }
   }
 
   // ===== Поле ввода =====
