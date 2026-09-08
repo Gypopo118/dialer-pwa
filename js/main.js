@@ -1,4 +1,5 @@
 import { initHomeScreen } from './screens/home-screen.js';
+import { initContactListScreen } from './screens/contact-list-screen.js';
 import { initContactHistoryScreen } from './screens/contact-history-screen.js';
 import { initCallScreen } from './screens/call-screen.js';
 import { initContextMenu } from './components/context-menu.js';
@@ -36,8 +37,18 @@ const contextMenu = initContextMenu({
   onChanged: () => home.refreshRecents(),
 });
 
-const home = initHomeScreen({ contextMenu });
+const home = initHomeScreen({
+  contextMenu,
+  onOpenContact: ({ number, contact }) => contactHistoryScreen.open({ number, contact }),
+});
 initCallScreen();
+
+// Раздел контактов: кнопка на клавиатуре вместо «C».
+
+const contactListScreen = initContactListScreen({
+  onOpenContact: ({ number, contact }) => contactHistoryScreen.open({ number, contact }),
+});
+window.addEventListener('dialer:open-contacts', () => contactListScreen.open());
 
 window.addEventListener('dialer:add-contact-blank', (e) => {
   contactForm.open({

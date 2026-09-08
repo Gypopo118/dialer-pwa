@@ -1,11 +1,12 @@
 import { icons } from '../utils/icons.js';
 import { uiStore } from '../store.js';
 import { blockedStore } from '../blocked-store.js';
+import { contactRowTemplate } from './contact-list-screen.js';
 import { buildRecentsList, filterRecents } from '../recents-model.js';
 import { contactsAdapter } from '../adapters/contacts-adapter.js';
 import { callLogAdapter } from '../adapters/call-log-adapter.js';
 import { telephonyAdapter } from '../adapters/telephony-adapter.js';
-import { formatPhoneForDisplay, formatDuration, formatRelativeTime, initialsFromName } from '../utils/format.js';
+import { formatPhoneForDisplay, formatDuration, formatRelativeTime, initialsFromName, normalizeNumber } from '../utils/format.js';
 import { attachListScrollGesture } from '../utils/list-scroll-gesture.js';
 import { pushLayer, popLayerSilently } from '../utils/back-stack.js';
 
@@ -15,10 +16,10 @@ const KEYPAD_LAYOUT = [
   ['7', '8', '9'],
   ['*', '0', '#'],
 ];
-const SIDE_COL = ['search', 'add-contact', 'plus', 'clear'];
+const SIDE_COL = ['search', 'add-contact', 'plus', 'contacts'];
 const KEYBOARD_LAYER = 'keyboard';
 
-export function initHomeScreen({ contextMenu }) {
+export function initHomeScreen({ contextMenu, onOpenContact }) {
   const recentsEl = document.getElementById('recents');
   const searchBar = document.getElementById('search-bar');
   const searchInput = document.getElementById('search-input');
@@ -58,11 +59,17 @@ export function initHomeScreen({ contextMenu }) {
     }
     lastCallStatus = s.status;
   });
+  let lastDialFilter = null;
   uiStore.subscribe((state) => {
     syncDialInput(state.dialInput || '');
     dialInput.classList.toggle('dial-input--empty', !state.dialInput);
     backspaceBtn.hidden = !state.dialInput;
     callBtn.toggleAttribute('disabled', !state.dialInput);
+    // Набранные цифры вживую фильтруют историю (smart dial).
+    if (state.dialInput !== lastDialFilter) {
+      lastDialFilter = state.dialInput;
+      renderRecents();
+    }
   });
   dialInput.value = uiStore.get().dialInput || '';
 
@@ -226,14 +233,16 @@ export function initHomeScreen({ contextMenu }) {
       window.dispatchEvent(new CustomEvent('dialer:add-contact-blank'));
     });
     keypadEl.querySelector('[data-side="plus"]').addEventListener('click', () => appendDigit('+'));
-    keypadEl.querySelector('[data-side="clear"]').addEventListener('click', () => { uiStore.set({ dialInput: '' }); lastCaret = { start: 0, end: 0 }; });
+    keypadEl.querySelector('[data-side="contacts"]').addEventListener('click', () => {
+      window.dispatchEvent(new CustomEvent('dialer:open-contacts'));
+    });
   }
 
   function sideIconFor(name) {
     if (name === 'search') return icons.search;
     if (name === 'add-contact') return icons.addContact;
     if (name === 'plus') return icons.plus;
-    if (name === 'clear') return `<span class="digit" style="font-size:17px">C</span>`;
+    if (name === 'contacts') return icons.contacts;
     return '';
   }
 
@@ -264,27 +273,83 @@ export function initHomeScreen({ contextMenu }) {
   keyboardPeek.addEventListener('click', showKeyboard);
 
   // ===== Список недавних =====
+  let renderSeq = 0;
+
   async function refreshRecents() {
     allRows = await buildRecentsList();
     renderRecents();
   }
 
-  function renderRecents() {
-    const { searchQuery } = uiStore.get();
-    const rows = filterRecents(allRows, searchQuery);
-    if (!rows.length) {
-      recentsEl.innerHTML = `<div class="recents-empty">${searchQuery ? 'Ничего не найдено' : 'Пока нет истории звонков'}</div>`;
+  // Поиск и набор фильтруют список вживую:
+  // - строка поиска — по именам и номерам, включая контакты без истории;
+  // - набранные цифры — по истории звонков (+ совпавшие контакты ниже).
+  async function renderRecents() {
+    const seq = ++renderSeq;
+    const { searchQuery, searchOpen, dialInput: dial } = uiStore.get();
+    const q = (searchQuery || '').trim();
+    const digits = (dial || '').replace(/[^\d+]/g, '');
+
+    let rows = allRows;
+    let matchedContacts = [];
+    if (searchOpen && q) {
+      rows = filterRecents(allRows, q);
+      try {
+        matchedContacts = await contactsAdapter.search(q);
+      } catch (_) {
+        matchedContacts = [];
+      }
+    } else if (digits) {
+      rows = allRows.filter((row) => row.number.replace(/[^\d+]/g, '').includes(digits));
+      try {
+        const found = await contactsAdapter.search(digits);
+        const inHistory = new Set(rows.map((r) => r.key));
+        matchedContacts = found.filter((c) =>
+          (c.numbers || []).some((n) => n.replace(/[^\d+]/g, '').includes(digits))
+          && !((c.numbers || []).some((n) => inHistory.has(normalizeNumber(n))))
+        );
+      } catch (_) {
+        matchedContacts = [];
+      }
+    }
+    if (seq !== renderSeq) return;
+    const hasFilter = (searchOpen && q) || digits;
+    if (!rows.length && !matchedContacts.length) {
+      recentsEl.innerHTML = `<div class="recents-empty">${hasFilter ? 'Ничего не найдено' : 'Пока нет истории звонков'}</div>`;
       return;
     }
-    recentsEl.innerHTML = rows.map(rowTemplate).join('');
-    recentsEl.querySelectorAll('.recent-row').forEach((el) => {
+    recentsEl.innerHTML = rows.map(rowTemplate).join('')
+      + (matchedContacts.length
+        ? `<div class="recents-group-label">Контакты</div>` + matchedContacts.map(contactRowTemplate).join('')
+        : '');
+    bindHistoryRows(rows);
+    bindContactRows(matchedContacts);
+  }
+
+  function bindHistoryRows(rows) {
+    recentsEl.querySelectorAll('.recent-row[data-key]').forEach((el) => {
       const row = rows.find((r) => r.key === el.dataset.key);
+      if (!row) return;
       el.addEventListener('click', (e) => {
         if (e.target.closest('[data-call]')) return;
         contextMenu.open(row);
       });
       el.querySelector('[data-call]').addEventListener('click', () => {
         telephonyAdapter.call(row.number, row.contact);
+      });
+    });
+  }
+
+  function bindContactRows(list) {
+    recentsEl.querySelectorAll('[data-contact]').forEach((el) => {
+      const c = list.find((x) => String(x.id) === el.dataset.contact);
+      if (!c) return;
+      const number = (c.numbers && c.numbers[0]) || '';
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('[data-call]')) return;
+        onOpenContact?.({ number, contact: c });
+      });
+      el.querySelector('[data-call]')?.addEventListener('click', () => {
+        telephonyAdapter.call(number, c);
       });
     });
   }

@@ -47,6 +47,17 @@ svg { display: block; }
 }
 .blocked-badge svg { width: 14px; height: 14px; }
 
+/* Фиксированные размеры инлайн-SVG: без width/height браузер даёт ~300px
+   и иконка раздувает layout (см. историю с часами). */
+.icon-btn svg { width: 22px; height: 22px; }
+#search-icon svg { width: 20px; height: 20px; }
+.backspace-btn svg { width: 22px; height: 22px; }
+.contact-header__avatar svg { width: 34px; height: 34px; }
+.call-screen__avatar svg { width: 56px; height: 56px; }
+.contact-action .circle svg { width: 22px; height: 22px; }
+.call-action-btn svg { width: 28px; height: 28px; }
+.call-toggle__circle svg { width: 24px; height: 24px; }
+
 #app {
   position: relative;
   height: 100%;
