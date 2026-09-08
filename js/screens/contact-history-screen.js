@@ -2,6 +2,7 @@ import { icons } from '../utils/icons.js';
 import { callLogAdapter } from '../adapters/call-log-adapter.js';
 import { contactsAdapter } from '../adapters/contacts-adapter.js';
 import { telephonyAdapter } from '../adapters/telephony-adapter.js';
+import { blockedStore } from '../blocked-store.js';
 import {
   formatPhoneForDisplay, formatDuration, formatClockTime, formatDayLabel, initialsFromName,
 } from '../utils/format.js';
@@ -34,6 +35,7 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
     const { number, contact } = current;
     const entries = await callLogAdapter.getEntriesForNumber(number);
     const isKnown = !!contact;
+    const blocked = blockedStore.isBlocked(number);
 
     screen.innerHTML = `
       <div class="contact-history">
@@ -52,7 +54,7 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
             ${isKnown ? `
               <button class="contact-action" data-action="block">
                 <span class="circle">${icons.block}</span>
-                <span>Блок</span>
+                <span>${blocked ? 'Разблок' : 'Блок'}</span>
               </button>
             ` : `
               <button class="contact-action" data-action="add-remove">
@@ -63,7 +65,7 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
           </div>
         </div>
         <div class="history-list">
-          ${renderEntries(entries)}
+          ${renderEntries(entries, blocked)}
         </div>
       </div>
     `;
@@ -72,16 +74,16 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
     screen.querySelector('[data-action="call"]').addEventListener('click', () => {
       telephonyAdapter.call(number, contact);
     });
-    screen.querySelector('[data-action="add-remove"]')?.addEventListener('click', async () => {
+    screen.querySelector('[data-action="add-remove"]')?.addEventListener('click', () => {
       if (!isKnown) {
-        await contactsAdapter.create({ name: formatPhoneForDisplay(number), number });
-        onContactChanged?.();
-        await render();
+        window.dispatchEvent(new CustomEvent('dialer:add-contact-blank', { detail: { number } }));
       }
     });
     screen.querySelector('[data-action="block"]')?.addEventListener('click', () => {
-      // TODO(native): BlockedNumberContract — недоступно из веб-PWA.
+      if (blockedStore.isBlocked(number)) blockedStore.unblock(number);
+      else blockedStore.block(number);
       onContactChanged?.();
+      render();
     });
 
     const nameField = screen.querySelector('[data-field="name"]');
@@ -104,7 +106,7 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
     });
   }
 
-  function renderEntries(entries) {
+  function renderEntries(entries, blocked) {
     if (!entries.length) {
       return `<div class="recents-empty">Звонков с этим номером ещё не было</div>`;
     }
@@ -123,7 +125,7 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
         <div class="history-item">
           <span class="call-arrow ${colorClass}">${arrow}</span>
           <div class="history-item__meta">
-            <span class="history-item__type">${typeLabel}</span>
+            <span class="history-item__type">${typeLabel}${blocked ? ` <span class="blocked-badge" title="Заблокированный контакт">${icons.block}</span>` : ''}</span>
             <span class="history-item__time">${formatClockTime(e.timestamp)}</span>
           </div>
           <span class="history-item__duration">${e.durationSec > 0 ? formatDuration(e.durationSec) : ''}</span>
@@ -133,5 +135,15 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
     return html;
   }
 
-  return { open, close };
+  return { open, close, refresh };
+
+  async function refresh() {
+    if (!current || screen.hidden) return;
+    try {
+      current.contact = await contactsAdapter.findByNumber(current.number);
+    } catch (_) {
+      // noop
+    }
+    await render();
+  }
 }

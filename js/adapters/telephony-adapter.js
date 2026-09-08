@@ -27,6 +27,7 @@
 import { callLogAdapter } from './call-log-adapter.js';
 import { contactsAdapter } from './contacts-adapter.js';
 import { nativeBridge } from './native-bridge.js';
+import { blockedStore } from '../blocked-store.js';
 
 const listeners = new Set();
 
@@ -111,6 +112,19 @@ async function handleNativeEvent(e) {
     micMuted: state.micMuted,
   };
   if (e.event === 'ringing-incoming') {
+    // Заблокированный номер не звонит: сразу отбой, запись остаётся
+    // в системном журнале, экран не показываем.
+    try {
+      if (blockedStore.isBlocked(number)) {
+        try {
+          await nativeBridge.hangUpCall();
+        } catch (_) { /* noop */ }
+        try {
+          callLogAdapter.refreshFromSystem();
+        } catch (_) { /* noop */ }
+        return;
+      }
+    } catch (_) { /* noop */ }
     setState({ ...base, status: 'incoming-ringing', direction: 'incoming', startedAt: null });
   } else if (e.event === 'dialing') {
     setState({ ...base, status: 'outgoing-ringing', direction: 'outgoing', startedAt: null });
@@ -178,7 +192,14 @@ export const telephonyAdapter = {
 
   // Вызывается только из демо-кнопок ("Симулировать входящий"), в реальном
   // приложении входящий звонок инициирует нативный ConnectionService.
+  // Заблокированный номер сразу уходит в пропущенные — без экрана и звонка.
   async simulateIncoming(number, contact = null) {
+    try {
+      if (blockedStore.isBlocked(number)) {
+        await callLogAdapter.appendEntry({ number, type: 'missed', durationSec: 0 });
+        return;
+      }
+    } catch (_) { /* noop */ }
     setState({
       status: 'incoming-ringing',
       direction: 'incoming',

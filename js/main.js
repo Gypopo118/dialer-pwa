@@ -5,6 +5,8 @@ import { initContextMenu } from './components/context-menu.js';
 import { contactsAdapter } from './adapters/contacts-adapter.js';
 import { nativeBridge } from './adapters/native-bridge.js';
 import { initNativeTelephony } from './adapters/telephony-adapter.js';
+import { initContactForm } from './components/contact-form.js';
+import { initNativeBackButton } from './utils/back-stack.js';
 import { uiStore } from './store.js';
 
 // История в браузере используется как стек "назад" (см. utils/back-stack.js).
@@ -16,16 +18,19 @@ const contactHistoryScreen = initContactHistoryScreen({
   onContactChanged: () => home.refreshRecents(),
 });
 
+// Форма нового контакта вместо window.prompt(): поле имени сразу в фокусе.
+const contactForm = initContactForm({
+  onSaved: async ({ name, number }) => {
+    await contactsAdapter.create({ name, number });
+    home.refreshRecents();
+    contactHistoryScreen.refresh();
+  },
+});
+
 const contextMenu = initContextMenu({
   onOpenHistory: (row) => contactHistoryScreen.open(row),
-  onOpenAddContact: async (row) => {
-    // Прототип: минимальный ввод имени. В финальной сборке — отдельный
-    // экран "Новый контакт" в едином визуальном стиле приложения.
-    const name = window.prompt('Имя контакта', '');
-    if (name && name.trim()) {
-      await contactsAdapter.create({ name: name.trim(), number: row.number });
-      home.refreshRecents();
-    }
+  onOpenAddContact: (row) => {
+    contactForm.open({ name: '', number: row.number, numberEditable: false, title: 'Новый контакт' });
   },
   onOpenEditContact: (row) => contactHistoryScreen.open(row),
   onChanged: () => home.refreshRecents(),
@@ -34,13 +39,13 @@ const contextMenu = initContextMenu({
 const home = initHomeScreen({ contextMenu });
 initCallScreen();
 
-window.addEventListener('dialer:add-contact-blank', async () => {
-  const name = window.prompt('Имя контакта', '');
-  const number = window.prompt('Номер телефона', uiStore.get().dialInput || '');
-  if (name && name.trim() && number && number.trim()) {
-    await contactsAdapter.create({ name: name.trim(), number: number.trim() });
-    home.refreshRecents();
-  }
+window.addEventListener('dialer:add-contact-blank', (e) => {
+  contactForm.open({
+    name: '',
+    number: (e.detail && e.detail.number) || uiStore.get().dialInput || '',
+    numberEditable: true,
+    title: 'Новый контакт',
+  });
 });
 
 // ===== Первый запуск: нативный режим (APK) или моки (PWA) =====
@@ -69,6 +74,9 @@ window.addEventListener('dialer:add-contact-blank', async () => {
   localStorage.setItem(FLAG, '1');
   await contactsAdapter.syncFromDevice();
 })();
+
+// ===== Системная кнопка «назад» в APK: предыдущий экран, а не выход =====
+initNativeBackButton();
 
 // ===== Service worker для офлайн-работы PWA =====
 if ('serviceWorker' in navigator) {

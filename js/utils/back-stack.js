@@ -18,6 +18,37 @@
 const stack = [];
 let ignoreNextPopstate = false;
 
+export function layerDepth() {
+  return stack.length;
+}
+
+// Аппаратная кнопка «назад» в нативной оболочке (Capacitor): ведёт себя
+// как жест — закрывает верхний слой через history. На корневом экране
+// приложение не закрывается, а сворачивается.
+export async function initNativeBackButton() {
+  try {
+    const cap = window.Capacitor;
+    if (!cap || typeof cap.isNativePlatform !== 'function' || !cap.isNativePlatform()) return false;
+    const App = (cap.Plugins && cap.Plugins.App)
+      || (typeof cap.registerPlugin === 'function' ? cap.registerPlugin('App') : null);
+    if (!App || typeof App.addListener !== 'function') return false;
+    await App.addListener('backButton', () => {
+      if (layerDepth() > 0) {
+        history.back();
+      } else {
+        try {
+          App.minimizeApp();
+        } catch (_) {
+          // noop
+        }
+      }
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 export function pushLayer(name, onPop) {
   stack.push({ name, onPop });
   history.pushState({ dialerLayer: name, depth: stack.length }, '');

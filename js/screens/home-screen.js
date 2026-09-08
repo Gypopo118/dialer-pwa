@@ -1,5 +1,6 @@
 import { icons } from '../utils/icons.js';
 import { uiStore } from '../store.js';
+import { blockedStore } from '../blocked-store.js';
 import { buildRecentsList, filterRecents } from '../recents-model.js';
 import { contactsAdapter } from '../adapters/contacts-adapter.js';
 import { callLogAdapter } from '../adapters/call-log-adapter.js';
@@ -306,6 +307,7 @@ export function initHomeScreen({ contextMenu }) {
           </div>
           <div class="recent-sub">
             <span class="call-arrow ${colorClass}">${arrow}</span>
+            ${blockedStore.isBlocked(row.number) ? `<span class="blocked-badge" title="Заблокированный контакт">${icons.block}</span>` : ''}
             ${secondaryText ? `<span>${secondaryText}</span><span class="dot">·</span>` : ''}
             <span class="clock-ico">${icons.clock}</span>
             <span class="dur">${row.lastDurationSec > 0 ? formatDuration(row.lastDurationSec) : '—'}</span>

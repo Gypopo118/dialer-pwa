@@ -35,6 +35,18 @@ input {
 }
 svg { display: block; }
 
+/* Бейдж заблокированного номера: круглый перечёркнутый значок */
+.blocked-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--call-missed);
+}
+.blocked-badge svg { width: 14px; height: 14px; }
+
 #app {
   position: relative;
   height: 100%;
