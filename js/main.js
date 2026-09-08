@@ -52,14 +52,12 @@ window.addEventListener('dialer:add-contact-blank', async () => {
     if (native) {
       await contactsAdapter.syncFromDevice();
       home.refreshRecents();
-      const FLAG = 'dialer.roleAsked';
-      if (!localStorage.getItem(FLAG)) {
-        localStorage.setItem(FLAG, '1');
-        try {
-          const st = await nativeBridge.isDefaultDialer();
-          if (!st.isDefault) await nativeBridge.requestDefaultDialerRole();
-        } catch (_) { /* пользователь отказался — спросим позже из настроек */ }
-      }
+      // Просим роль при каждом запуске, пока не назначены: без неё
+      // Android не отдаёт звонки нашему InCallService и показывает чужой UI.
+      try {
+        const st = await nativeBridge.isDefaultDialer();
+        if (!st.isDefault) await nativeBridge.requestDefaultDialerRole();
+      } catch (_) { /* пользователь отказался — спросим при следующем запуске */ }
       return;
     }
   } catch (e) {

@@ -54,9 +54,26 @@ function setState(patch) {
 // В native-режиме звонком управляет система (Telecom), а веб-UI только
 // отображает состояние, приходящее событием 'telecomEvent'.
 let nativeMode = false;
+let endWatchdog = null;
 
 function isNative() {
   return nativeMode;
+}
+
+// Страховка красной трубки: если 'disconnected' из InCallService не придёт
+// (например, звонок обслужил старый диалер, т.к. мы ещё не default),
+// экран звонка всё равно гаснет и возвращает в список/клавиатуру.
+function armEndWatchdog() {
+  if (endWatchdog) clearTimeout(endWatchdog);
+  endWatchdog = setTimeout(() => {
+    endWatchdog = null;
+    if (state.status !== 'idle') {
+      try {
+        callLogAdapter.refreshFromSystem();
+      } catch (_) { /* noop */ }
+      telephonyAdapter._reset();
+    }
+  }, 2500);
 }
 
 export async function initNativeTelephony() {
@@ -193,7 +210,13 @@ export const telephonyAdapter = {
         await nativeBridge.hangUpCall();
       } catch (e) {
         console.warn('[telephony] decline failed:', e);
+        try {
+          callLogAdapter.refreshFromSystem();
+        } catch (_) { /* noop */ }
+        telephonyAdapter._reset();
+        return;
       }
+      armEndWatchdog();
       return;
     }
     if (state.status !== 'incoming-ringing') return;
@@ -207,7 +230,15 @@ export const telephonyAdapter = {
         await nativeBridge.hangUpCall();
       } catch (e) {
         console.warn('[telephony] hangUp failed:', e);
+        // Наш InCallService звонка не видел (обслужил старый диалер) —
+        // гасим экран сразу, иначе он зависнет с активной красной трубкой.
+        try {
+          callLogAdapter.refreshFromSystem();
+        } catch (_) { /* noop */ }
+        telephonyAdapter._reset();
+        return;
       }
+      armEndWatchdog();
       return; // 'disconnected' придёт событием, лог уже в системе.
     }
     if (state.status === 'idle') return;
@@ -241,6 +272,10 @@ export const telephonyAdapter = {
 
   _reset() {
     clearTimeout(this._simTimer);
+    if (endWatchdog) {
+      clearTimeout(endWatchdog);
+      endWatchdog = null;
+    }
     setState({
       status: 'idle', direction: null, number: null, contactName: null,
       photoUrl: null, speakerOn: false, micMuted: false, startedAt: null,
