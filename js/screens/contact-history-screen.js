@@ -54,7 +54,7 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
           <div class="contact-header__top">
             <button class="icon-btn" data-action="back">${icons.chevronLeft}</button>
           </div>
-          <div class="contact-header__avatar">${isKnown ? initialsFromName(contact.name) : icons.phone}</div>
+          <div class="contact-header__avatar">${isKnown ? initialsFromName(contact.name) : icons.person}</div>
           <div class="contact-header__name" data-field="name" ${inlineEditable ? 'contenteditable="true"' : ''}>${isKnown ? contact.name : formatPhoneForDisplay(number)}</div>
           ${isKnown ? `<div class="contact-header__number" data-field="number" ${inlineEditable ? 'contenteditable="true"' : ''}>${formatPhoneForDisplay(number)}</div>` : ''}
           <div class="contact-header__actions">

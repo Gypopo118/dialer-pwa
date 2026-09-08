@@ -291,6 +291,16 @@ export const telephonyAdapter = {
     setState({ micMuted: muted });
   },
 
+  // DTMF-тон в активном звонке (IVR-меню вида «нажмите 1»). В браузере — тихий no-op.
+  async playDtmf(tone) {
+    if (!isNative()) return;
+    try {
+      await nativeBridge.playDtmfTone(tone);
+    } catch (e) {
+      console.warn('[telephony] dtmf failed:', e);
+    }
+  },
+
   _reset() {
     clearTimeout(this._simTimer);
     if (endWatchdog) {

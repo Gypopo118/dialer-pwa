@@ -45,7 +45,8 @@ import com.getcapacitor.annotation.PermissionCallback;
             Manifest.permission.READ_PHONE_STATE,
             Manifest.permission.ANSWER_PHONE_CALLS,
             Manifest.permission.RECORD_AUDIO
-        }, alias = "phone")
+        }, alias = "phone"),
+        @Permission(strings = { Manifest.permission.POST_NOTIFICATIONS }, alias = "notifications")
     }
 )
 public class DialerTelecomPlugin extends Plugin {
@@ -278,6 +279,48 @@ public class DialerTelecomPlugin extends Plugin {
         } catch (Exception e) {
             call.reject("contact editor failed: " + e.getMessage());
         }
+    }
+
+    @PluginMethod
+    public void playDtmfTone(PluginCall call) {
+        String tone = call.getString("tone", "");
+        if (tone == null || tone.length() != 1 || "0123456789*#".indexOf(tone.charAt(0)) < 0) {
+            call.reject("bad tone");
+            return;
+        }
+        if (DialerInCallService.playDtmf(tone.charAt(0))) {
+            JSObject ret = new JSObject();
+            ret.put("ok", true);
+            call.resolve(ret);
+        } else {
+            call.reject("no active call");
+        }
+    }
+
+    // Уведомления о звонках (Android 13+): без рантайм-разрешения входящий
+    // при свёрнутом приложении показать нечем. На старых версиях — сразу ок.
+    @PluginMethod
+    public void ensureNotifications(PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            JSObject ret = new JSObject();
+            ret.put("ok", true);
+            call.resolve(ret);
+            return;
+        }
+        if (getPermissionState("notifications") == PermissionState.GRANTED) {
+            JSObject ret = new JSObject();
+            ret.put("ok", true);
+            call.resolve(ret);
+            return;
+        }
+        requestPermissionForAliases(new String[]{"notifications"}, call, "onNotificationsPerms");
+    }
+
+    @PermissionCallback
+    private void onNotificationsPerms(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("ok", getPermissionState("notifications") == PermissionState.GRANTED);
+        call.resolve(ret);
     }
 
     @PluginMethod

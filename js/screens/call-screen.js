@@ -9,12 +9,16 @@ export function initCallScreen() {
   const root = document.getElementById('call-screen');
   let timerInterval = null;
   let isOpen = false;
+  let padOpen = false;
+  let lastState = telephonyAdapter.getState();
 
   telephonyAdapter.onStateChange((state) => render(state));
   render(telephonyAdapter.getState());
 
   function render(state) {
+    lastState = state;
     if (state.status === 'idle') {
+      padOpen = false;
       close();
       return;
     }
@@ -31,7 +35,7 @@ export function initCallScreen() {
     const displayName = state.contactName || 'Неизвестный номер';
     const avatarContent = state.photoUrl
       ? `<img src="${state.photoUrl}" alt="">`
-      : (state.contactName ? initialsFromName(state.contactName) : icons.phone);
+      : (state.contactName ? initialsFromName(state.contactName) : icons.person);
 
     root.innerHTML = `
       <div class="call-screen__status">${statusText}</div>
@@ -40,18 +44,32 @@ export function initCallScreen() {
       <div class="call-screen__number">${formatPhoneForDisplay(state.number || '')}</div>
       <div class="call-screen__timer" data-timer ${isActive ? '' : 'hidden'}>00:00</div>
       <div class="call-screen__spacer"></div>
-      ${isActive || state.status === 'outgoing-ringing' ? `
+      ${isActive || state.status === 'outgoing-ringing' ? (padOpen ? `
+        <div class="dtmf">
+          <div class="dtmf-head">
+            <span class="dtmf-title">Набор номера</span>
+            <button class="icon-btn" data-action="pad-close" aria-label="Закрыть клавиатуру">✕</button>
+          </div>
+          <div class="dtmf-grid">
+            ${['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'].map((d) => `<button class="dtmf-key" data-dtmf="${d}">${d}</button>`).join('')}
+          </div>
+        </div>
+      ` : `
         <div class="call-toggles">
           <button class="call-toggle" data-toggle="speaker" aria-pressed="${state.speakerOn}">
             <span class="call-toggle__circle">${icons.speaker}</span>
             <span class="call-toggle__label">Громкая связь</span>
+          </button>
+          <button class="call-toggle" data-toggle="dialpad" aria-pressed="false">
+            <span class="call-toggle__circle">${icons.dialpad}</span>
+            <span class="call-toggle__label">Клавиатура</span>
           </button>
           <button class="call-toggle" data-toggle="mute" aria-pressed="${state.micMuted}">
             <span class="call-toggle__circle">${icons.micMute}</span>
             <span class="call-toggle__label">Выкл. мой звук</span>
           </button>
         </div>
-      ` : ''}
+      `) : ''}
       <div class="call-actions ${isIncoming ? 'call-actions--incoming' : ''}">
         ${isIncoming ? `
           <button class="call-action-btn call-action-btn--decline" data-action="decline">${icons.hangup}</button>
@@ -69,6 +87,17 @@ export function initCallScreen() {
       telephonyAdapter.setSpeakerOn(!telephonyAdapter.getState().speakerOn));
     root.querySelector('[data-toggle="mute"]')?.addEventListener('click', () =>
       telephonyAdapter.setMicMuted(!telephonyAdapter.getState().micMuted));
+    root.querySelector('[data-toggle="dialpad"]')?.addEventListener('click', () => {
+      padOpen = true;
+      render(lastState);
+    });
+    root.querySelector('[data-action="pad-close"]')?.addEventListener('click', () => {
+      padOpen = false;
+      render(lastState);
+    });
+    root.querySelectorAll('[data-dtmf]').forEach((btn) => {
+      btn.addEventListener('click', () => telephonyAdapter.playDtmf(btn.dataset.dtmf));
+    });
 
     if (isActive && !timerInterval) {
       timerInterval = setInterval(() => {

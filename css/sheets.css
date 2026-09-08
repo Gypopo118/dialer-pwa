@@ -368,6 +368,40 @@
 }
 .call-toggle:active .call-toggle__circle { transform: translateY(1px); }
 
+/* ===== DTMF-клавиатура в окне звонка ===== */
+.dtmf { width: 100%; max-width: 300px; }
+.dtmf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.dtmf-title {
+  font-size: var(--fs-secondary);
+  color: var(--text-secondary);
+}
+.dtmf-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.dtmf-key {
+  min-height: 54px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, var(--surface-2-top), var(--surface-2) 55%);
+  box-shadow: var(--shadow-key);
+  font-size: 22px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dtmf-key:active {
+  background: var(--surface-2-pressed);
+  box-shadow: var(--shadow-key-pressed);
+  transform: translateY(1px);
+}
+
 .call-actions {
   margin-top: 34px;
   display: flex;

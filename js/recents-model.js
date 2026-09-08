@@ -1,6 +1,6 @@
 import { callLogAdapter } from './adapters/call-log-adapter.js';
 import { contactsAdapter } from './adapters/contacts-adapter.js';
-import { normalizeNumber } from './utils/format.js';
+import { normalizeNumber, normalizeText } from './utils/format.js';
 
 // Возвращает по одной строке на номер (сгруппировано), отсортировано по
 // времени последнего звонка. Каждая строка несёт: имя/номер контакта,
@@ -47,11 +47,11 @@ function entry_number(list) {
 }
 
 export function filterRecents(rows, query) {
-  const q = query.trim().toLowerCase();
+  const q = normalizeText(query);
   if (!q) return rows;
   const qDigits = q.replace(/[^\d+]/g, '');
   return rows.filter((row) => {
-    const name = row.contact?.name?.toLowerCase() || '';
+    const name = normalizeText(row.contact?.name || '');
     const numberDigits = row.number.replace(/[^\d+]/g, '');
     return (name && name.includes(q)) || (qDigits && numberDigits.includes(qDigits));
   });

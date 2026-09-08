@@ -19,6 +19,7 @@
 
 import { mockContacts } from '../mock-data.js';
 import { nativeBridge } from './native-bridge.js';
+import { normalizeNumber, normalizeText } from '../utils/format.js';
 
 const STORAGE_KEY = 'dialer.contacts.v1';
 
@@ -44,7 +45,7 @@ export const contactsAdapter = {
   async getAll() {
     const sys = await nativeBridge.getContacts();
     if (sys && Array.isArray(sys.contacts)) {
-      return sys.contacts
+      const sysList = sys.contacts
         .filter((c) => c.number)
         .map((c) => ({
           id: c.id,
@@ -53,6 +54,13 @@ export const contactsAdapter = {
           photoUrl: c.photoUri || null,
           source: 'device',
         }));
+      // Плюс локальные контакты приложения, которых нет в системе.
+      const sysNums = new Set();
+      sysList.forEach((c) => (c.numbers || []).forEach((n) => sysNums.add(normalizeNumber(n || ''))));
+      const localOnly = contacts.filter(
+        (c) => !((c.numbers || []).some((n) => sysNums.has(normalizeNumber(n || ''))))
+      );
+      return [...sysList, ...localOnly.map((c) => ({ ...c, numbers: [...(c.numbers || [])] }))];
     }
     return contacts.map((c) => ({ ...c }));
   },
@@ -64,13 +72,13 @@ export const contactsAdapter = {
   },
 
   async search(query) {
-    const q = query.trim().toLowerCase();
+    const q = normalizeText(query);
     if (!q) return [];
     const nq = q.replace(/[^\d+]/g, '');
     const all = await this.getAll();
     return all.filter((c) =>
-      (c.name || '').toLowerCase().includes(q) ||
-      (c.numbers || []).some((n) => (n || '').replace(/[^\d+]/g, '').includes(nq))
+      normalizeText(c.name).includes(q) ||
+      (nq && (c.numbers || []).some((n) => (n || '').replace(/[^\d+]/g, '').includes(nq)))
     );
   },
 

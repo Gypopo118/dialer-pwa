@@ -50,6 +50,11 @@ export function initialsFromName(name) {
 }
 
 // Нормализация номера для группировки строк истории по одному собеседнику.
+export function normalizeText(s) {
+  // Для поиска по именам: регистр + ё/е (на клавиатурах часто без точек).
+  return (s || '').toLowerCase().replace(/ё/g, 'е').trim();
+}
+
 export function normalizeNumber(number) {
   return number.replace(/[^\d+]/g, '');
 }

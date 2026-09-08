@@ -1,10 +1,16 @@
 package com.gypopo.dialer;
 
 import android.net.Uri;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.os.Build;
 import android.telecom.Call;
 import android.telecom.CallAudioState;
 import android.telecom.InCallService;
 import android.telecom.VideoProfile;
+import androidx.core.app.NotificationCompat;
 
 import com.getcapacitor.JSObject;
 
@@ -18,6 +24,11 @@ import java.util.List;
  * без изменений. Управление звуком — штатными методами InCallService.
  */
 public class DialerInCallService extends InCallService {
+
+    private static final String CHANNEL_INCOMING = "dialer_incoming";
+    private static final String CHANNEL_ONGOING = "dialer_ongoing";
+    private static final int NOTIF_INCOMING = 1001;
+    private static final int NOTIF_ONGOING = 1002;
 
     private static DialerTelecomPlugin plugin;
     private static DialerInCallService instance;
@@ -58,6 +69,7 @@ public class DialerInCallService extends InCallService {
     public void onCallRemoved(Call call) {
         super.onCallRemoved(call);
         calls.remove(call);
+        cancelNotifications();
         JSObject data = new JSObject();
         data.put("event", "disconnected");
         data.put("number", numberOf(call));
@@ -69,12 +81,17 @@ public class DialerInCallService extends InCallService {
         String event;
         if (state == Call.STATE_RINGING) {
             event = "ringing-incoming";
+            showIncomingNotification(call);
         } else if (state == Call.STATE_DIALING || state == Call.STATE_CONNECTING) {
             event = "dialing";
+            cancelNotification(NOTIF_INCOMING);
         } else if (state == Call.STATE_ACTIVE) {
             event = "active";
+            cancelNotification(NOTIF_INCOMING);
+            showOngoingNotification(call);
         } else if (state == Call.STATE_DISCONNECTED || state == Call.STATE_DISCONNECTING) {
             event = "disconnected";
+            cancelNotifications();
         } else {
             event = "other";
         }
@@ -144,6 +161,19 @@ public class DialerInCallService extends InCallService {
         }
     }
 
+    static boolean playDtmf(char tone) {
+        if (instance == null) return false;
+        Call c = firstLiveCall();
+        if (c == null || c.getState() != Call.STATE_ACTIVE) return false;
+        try {
+            c.playDtmfTone(tone);
+            c.stopDtmfTone();
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     static boolean setMicMuted(boolean muted) {
         if (instance == null) return false;
         try {
@@ -159,5 +189,88 @@ public class DialerInCallService extends InCallService {
         super.onBringToForeground(showDialpad);
         // Система просит показать UI звонка — WebView уже отображает
         // экран звонка по событию telecomEvent; отдельных действий не нужно.
+    }
+
+    // ---------- Уведомления: звонок виден и при свёрнутом приложении ----------
+
+    private void createChannels() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        try {
+            NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm == null) return;
+            NotificationChannel incoming = new NotificationChannel(
+                CHANNEL_INCOMING, "Входящие звонки", NotificationManager.IMPORTANCE_HIGH);
+            nm.createNotificationChannel(incoming);
+            NotificationChannel ongoing = new NotificationChannel(
+                CHANNEL_ONGOING, "Текущий звонок", NotificationManager.IMPORTANCE_DEFAULT);
+            nm.createNotificationChannel(ongoing);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private PendingIntent openAppIntent() {
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.setAction("com.gypopo.dialer.OPEN_CALL");
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        return PendingIntent.getActivity(
+            this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
+
+    private void showIncomingNotification(Call call) {
+        createChannels();
+        String number = numberOf(call);
+        try {
+            Notification notif = new NotificationCompat.Builder(this, CHANNEL_INCOMING)
+                .setSmallIcon(android.R.drawable.sym_call_incoming)
+                .setContentTitle(number.isEmpty() ? "Входящий звонок" : number)
+                .setContentText("Нажмите, чтобы ответить")
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setFullScreenIntent(openAppIntent(), true)
+                .setContentIntent(openAppIntent())
+                .setAutoCancel(true)
+                .build();
+            postNotification(NOTIF_INCOMING, notif);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void showOngoingNotification(Call call) {
+        createChannels();
+        String number = numberOf(call);
+        try {
+            Notification notif = new NotificationCompat.Builder(this, CHANNEL_ONGOING)
+                .setSmallIcon(android.R.drawable.sym_action_call)
+                .setContentTitle(number.isEmpty() ? "Разговор" : number)
+                .setContentText("Звонок через Звонилку")
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setOngoing(true)
+                .setContentIntent(openAppIntent())
+                .build();
+            postNotification(NOTIF_ONGOING, notif);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void postNotification(int id, Notification notif) {
+        try {
+            NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm != null) nm.notify(id, notif);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void cancelNotification(int id) {
+        try {
+            NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm != null) nm.cancel(id);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void cancelNotifications() {
+        cancelNotification(NOTIF_INCOMING);
+        cancelNotification(NOTIF_ONGOING);
     }
 }

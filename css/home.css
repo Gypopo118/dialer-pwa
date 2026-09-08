@@ -5,22 +5,25 @@
   padding-top: calc(var(--safe-top) + 10px);
 }
 
-/* ===== Поисковая строка (появляется по тапу на лупу) ===== */
+/* ===== Поисковая строка (по тапу на лупу): плоское чёрное поле, без рамки ===== */
 .search-bar {
   margin: 0 14px 8px;
   display: flex;
   align-items: center;
   gap: 10px;
-  background: var(--surface-1);
-  border-radius: var(--radius-pill);
-  padding: 10px 16px;
+  background: transparent;
+  border-radius: 0;
+  padding: 10px 4px;
   transform-origin: top;
 }
 .search-bar[hidden] { display: none; }
 .search-bar input {
   flex: 1;
-  font-size: var(--fs-body);
+  min-width: 0;
+  font-size: 17px;
   color: var(--text-primary);
+  background: transparent;
+  caret-color: var(--accent-call);
 }
 .search-bar input::placeholder { color: var(--text-tertiary); }
 .search-bar .icon-btn { color: var(--text-secondary); }

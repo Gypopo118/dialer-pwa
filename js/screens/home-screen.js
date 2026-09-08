@@ -360,7 +360,7 @@ export function initHomeScreen({ contextMenu, onOpenContact }) {
     const colorClass = `call-arrow--${row.lastType === 'missed' ? 'missed' : row.lastType === 'incoming' ? 'in' : 'out'}`;
     const primaryText = isKnown ? row.contact.name : formatPhoneForDisplay(row.number);
     const secondaryText = isKnown ? formatPhoneForDisplay(row.number) : null;
-    const avatarContent = isKnown ? initialsFromName(row.contact.name) : icons.phone;
+    const avatarContent = isKnown ? initialsFromName(row.contact.name) : icons.person;
 
     return `
       <div class="recent-row" data-key="${row.key}">

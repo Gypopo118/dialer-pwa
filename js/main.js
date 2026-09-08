@@ -125,6 +125,11 @@ window.addEventListener('dialer:add-contact-blank', (e) => {
     if (native) {
       await contactsAdapter.syncFromDevice();
       home.refreshRecents();
+      // Уведомления о звонках (Android 13+): иначе входящий при свёрнутом
+      // приложении нечем показать.
+      try {
+        await nativeBridge.ensureNotifications();
+      } catch (_) { /* noop */ }
       // Просим роль при каждом запуске, пока не назначены: без неё
       // Android не отдаёт звонки нашему InCallService и показывает чужой UI.
       try {

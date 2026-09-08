@@ -56,7 +56,7 @@
   --fs-micro: 11px;
 
   /* Компоновка */
-  --dial-block-height: 39%; /* строго в пределах "чуть больше трети", не более ~40% с полем ввода */
+  --dial-block-height: 48%; /* блок клавиатуры выше: клавиши ~+25% по высоте */
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
 }

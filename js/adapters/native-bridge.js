@@ -79,6 +79,26 @@ export const nativeBridge = {
     return getPlugin().setMicMuted({ muted: !!muted });
   },
 
+  async ensureNotifications() {
+    const p = getPlugin();
+    if (!p) return null;
+    try {
+      return await p.ensureNotifications();
+    } catch (_) {
+      return null;
+    }
+  },
+
+  async playDtmfTone(tone) {
+    const p = getPlugin();
+    if (!p) return null;
+    try {
+      return await p.playDtmfTone({ tone: String(tone) });
+    } catch (_) {
+      return null;
+    }
+  },
+
   async openContactEditor({ name = '', number = '' } = {}) {
     const p = getPlugin();
     if (!p) return null;
