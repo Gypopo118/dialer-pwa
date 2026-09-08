@@ -89,6 +89,16 @@ export const nativeBridge = {
     }
   },
 
+  async openContactEditorForEdit({ contactId = '' } = {}) {
+    const p = getPlugin();
+    if (!p) return null;
+    try {
+      return await p.openContactEditorForEdit({ contactId: String(contactId) });
+    } catch (_) {
+      return null;
+    }
+  },
+
   async getContacts() {
     const p = getPlugin();
     if (!p) return null;

@@ -2,6 +2,7 @@ import { icons } from '../utils/icons.js';
 import { callLogAdapter } from '../adapters/call-log-adapter.js';
 import { contactsAdapter } from '../adapters/contacts-adapter.js';
 import { telephonyAdapter } from '../adapters/telephony-adapter.js';
+import { nativeBridge } from '../adapters/native-bridge.js';
 import { blockedStore } from '../blocked-store.js';
 import {
   formatPhoneForDisplay, formatDuration, formatClockTime, formatDayLabel, initialsFromName,
@@ -36,6 +37,16 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
     const entries = await callLogAdapter.getEntriesForNumber(number);
     const isKnown = !!contact;
     const blocked = blockedStore.isBlocked(number);
+    // В APK правка идёт через системный редактор Google (пункт «Изменить»),
+    // поэтому inline-правка в карточке отключена — иначе правился бы
+    // невидимый локальный стор. В браузере оставляем как было.
+    let native = false;
+    try {
+      native = await nativeBridge.isAvailable();
+    } catch (_) {
+      native = false;
+    }
+    const inlineEditable = isKnown && !native;
 
     screen.innerHTML = `
       <div class="contact-history">
@@ -44,8 +55,8 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
             <button class="icon-btn" data-action="back">${icons.chevronLeft}</button>
           </div>
           <div class="contact-header__avatar">${isKnown ? initialsFromName(contact.name) : icons.phone}</div>
-          <div class="contact-header__name" data-field="name" ${isKnown ? 'contenteditable="true"' : ''}>${isKnown ? contact.name : formatPhoneForDisplay(number)}</div>
-          ${isKnown ? `<div class="contact-header__number" data-field="number" contenteditable="true">${formatPhoneForDisplay(number)}</div>` : ''}
+          <div class="contact-header__name" data-field="name" ${inlineEditable ? 'contenteditable="true"' : ''}>${isKnown ? contact.name : formatPhoneForDisplay(number)}</div>
+          ${isKnown ? `<div class="contact-header__number" data-field="number" ${inlineEditable ? 'contenteditable="true"' : ''}>${formatPhoneForDisplay(number)}</div>` : ''}
           <div class="contact-header__actions">
             <button class="contact-action" data-action="call">
               <span class="circle circle--call">${icons.phone}</span>

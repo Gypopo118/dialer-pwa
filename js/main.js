@@ -45,12 +45,35 @@ async function openAddContact({ name = '', number = '', numberEditable = false }
   contactForm.open({ name, number, numberEditable, title: 'Новый контакт' });
 }
 
+// Правка контакта: в APK — системный редактор Google по ID контакта
+// (сохранение туда же, списки обновляются по возврату), в браузере —
+// наша карточка с inline-правкой.
+async function openEditContact(row) {
+  const contact = row && row.contact;
+  try {
+    if (contact && await nativeBridge.isAvailable()) {
+      const m = /^device-(\d+)$/.exec(contact.id || '');
+      if (m) {
+        await nativeBridge.openContactEditorForEdit({ contactId: m[1] });
+        home.refreshRecents();
+        contactHistoryScreen.refresh();
+        return;
+      }
+    }
+  } catch (_) {
+    // noop — падаем на карточку
+  }
+  contactHistoryScreen.open(row);
+}
+
 const contextMenu = initContextMenu({
   onOpenHistory: (row) => contactHistoryScreen.open(row),
   onOpenAddContact: (row) => {
     openAddContact({ name: '', number: row.number, numberEditable: false });
   },
-  onOpenEditContact: (row) => contactHistoryScreen.open(row),
+  onOpenEditContact: (row) => {
+    openEditContact(row);
+  },
   onChanged: () => home.refreshRecents(),
 });
 

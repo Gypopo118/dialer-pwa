@@ -3,6 +3,7 @@ package com.gypopo.dialer;
 import android.Manifest;
 import android.app.Activity;
 import android.app.role.RoleManager;
+import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
@@ -255,6 +256,28 @@ public class DialerTelecomPlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("saved", result.getResultCode() == Activity.RESULT_OK);
         call.resolve(ret);
+    }
+
+    // Правка существующего контакта в системном редакторе (тот же Google).
+    // contactId — числовой ContactsContract.Contacts._ID (JS передаёт число
+    // из id вида "device-<id>").
+    @PluginMethod
+    public void openContactEditorForEdit(PluginCall call) {
+        String contactId = call.getString("contactId", "");
+        long id;
+        try {
+            id = Long.parseLong(contactId);
+        } catch (Exception e) {
+            call.reject("bad contactId");
+            return;
+        }
+        try {
+            Uri uri = ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI, id);
+            Intent intent = new Intent(Intent.ACTION_EDIT, uri);
+            startActivityForResult(call, intent, "onContactEditorFinished");
+        } catch (Exception e) {
+            call.reject("contact editor failed: " + e.getMessage());
+        }
     }
 
     @PluginMethod
