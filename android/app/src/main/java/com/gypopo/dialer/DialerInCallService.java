@@ -60,6 +60,9 @@ public class DialerInCallService extends InCallService {
         super.onCallAdded(call);
         calls.add(call);
         emitState(call);
+        // Пояс поверх блокировки: полноэкранный интент иногда глушится
+        // системой/OEM — прямой запуск UI дублем повышает шансы разбудить.
+        if (call.getState() == Call.STATE_RINGING) bringCallUiFront();
         call.registerCallback(new Call.Callback() {
             @Override
             public void onStateChanged(Call c, int state) {
@@ -241,6 +244,17 @@ public class DialerInCallService extends InCallService {
                 CHANNEL_ONGOING, "Текущий звонок", NotificationManager.IMPORTANCE_DEFAULT);
             nm.createNotificationChannel(ongoing);
         } catch (Exception ignored) {
+        }
+    }
+
+    private void bringCallUiFront() {
+        try {
+            Intent intent = new Intent(this, MainActivity.class);
+            intent.setAction("com.gypopo.dialer.OPEN_CALL");
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(intent);
+        } catch (Exception ignored) {
+            // BAL-запрет — остаётся полноэкранный интент из уведомления.
         }
     }
 

@@ -79,16 +79,13 @@ const contextMenu = initContextMenu({
   onChanged: () => home.refreshRecents(),
 });
 
-const home = initHomeScreen({
-  contextMenu,
-  onOpenContact: ({ number, contact }) => contactHistoryScreen.open({ number, contact }),
-});
+const home = initHomeScreen({ contextMenu });
 initCallScreen();
 
 // Раздел контактов: кнопка на клавиатуре вместо «C».
 
 const contactListScreen = initContactListScreen({
-  onOpenContact: ({ number, contact }) => contactHistoryScreen.open({ number, contact }),
+  onOpenMenu: (row) => contextMenu.open(row),
 });
 window.addEventListener('dialer:open-contacts', () => contactListScreen.open());
 
@@ -142,6 +139,11 @@ window.addEventListener('dialer:add-contact-blank', (e) => {
         if (fsi && fsi.ok === false) {
           console.warn('[dialer] full-screen notifications disabled: allow in app settings');
         }
+      } catch (_) { /* noop */ }
+      // Поверх окон: дубль к FSI для пробуждения. Открывает системные
+      // настройки один раз, дальше система помнит выбор.
+      try {
+        await nativeBridge.ensureOverlayPermission();
       } catch (_) { /* noop */ }
       // Просим роль при каждом запуске, пока не назначены: без неё
       // Android не отдаёт звонки нашему InCallService и показывает чужой UI.

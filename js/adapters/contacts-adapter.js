@@ -24,13 +24,33 @@ import { normalizeNumber, normalizeText, numbersEqual } from '../utils/format.js
 const STORAGE_KEY = 'dialer.contacts.v1';
 
 function loadStore() {
+  let initial = null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) initial = JSON.parse(raw);
   } catch (e) { /* игнорируем повреждённое хранилище */ }
-  const seeded = mockContacts.map((c) => ({ ...c }));
-  saveStore(seeded);
-  return seeded;
+  if (!initial) {
+    const seeded = mockContacts.map((c) => ({ ...c }));
+    saveStore(seeded);
+    return seeded;
+  }
+  // Разовая чистка старых дублей: один номер — один контакт, первый выигрывает.
+  const seen = [];
+  const clean = [];
+  let changed = false;
+  for (const c of initial) {
+    const nums = (c.numbers || []).map((n) => (n || '').replace(/[^\d+]/g, '')).filter(Boolean);
+    if (nums.length && nums.every((n) => seen.some((k) => numbersEqual(k, n)))) {
+      changed = true;
+      continue;
+    }
+    nums.forEach((n) => {
+      if (!seen.some((k) => numbersEqual(k, n))) seen.push(n);
+    });
+    clean.push(c);
+  }
+  if (changed) saveStore(clean);
+  return clean;
 }
 
 function saveStore(list) {
@@ -65,15 +85,27 @@ export const contactsAdapter = {
   async getAll() {
     const raw = await systemContacts();
     if (raw) {
-      const sysList = raw
-        .filter((c) => c.number)
-        .map((c) => ({
-          id: c.id,
-          name: c.name || c.number,
-          numbers: [c.number],
-          photoUrl: c.photoUri || null,
-          source: 'device',
-        }));
+      // Один человек — одна строка: все номера одного CONTACT_ID склеиваем.
+      const byId = new Map();
+      for (const c of raw) {
+        if (!c.number) continue;
+        const key = c.id || ('noid:' + c.number);
+        let entry = byId.get(key);
+        if (!entry) {
+          entry = { id: c.id, name: null, numbers: [], photoUrl: null };
+          byId.set(key, entry);
+        }
+        if (!entry.numbers.includes(c.number)) entry.numbers.push(c.number);
+        if (c.name && !entry.name) entry.name = c.name;
+        if (!entry.photoUrl && c.photoUri) entry.photoUrl = c.photoUri;
+      }
+      const sysList = [...byId.values()].map((e) => ({
+        id: e.id || ('device-noid-' + e.numbers[0]),
+        name: e.name || e.numbers[0],
+        numbers: e.numbers,
+        photoUrl: e.photoUrl,
+        source: 'device',
+      }));
       // Плюс локальные контакты приложения, которых нет в системе.
       const sysNums = new Set();
       sysList.forEach((c) => (c.numbers || []).forEach((n) => sysNums.add(normalizeNumber(n || ''))));

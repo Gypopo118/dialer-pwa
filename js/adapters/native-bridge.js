@@ -89,6 +89,16 @@ export const nativeBridge = {
     }
   },
 
+  async ensureOverlayPermission() {
+    const p = getPlugin();
+    if (!p) return null;
+    try {
+      return await p.ensureOverlayPermission();
+    } catch (_) {
+      return null;
+    }
+  },
+
   async getCurrentCall() {
     const p = getPlugin();
     if (!p) return null;

@@ -48,7 +48,7 @@ export function contactRowTemplate(c) {
   `;
 }
 
-export function initContactListScreen({ onOpenContact }) {
+export function initContactListScreen({ onOpenMenu }) {
   const screen = document.getElementById('screen-contacts');
   let seq = 0;
 
@@ -57,7 +57,39 @@ export function initContactListScreen({ onOpenContact }) {
     screen.classList.add('screen--enter-right');
     requestAnimationFrame(() => screen.classList.remove('screen--enter-right'));
     pushLayer(LAYER, () => close(true));
-    await render('', false);
+    buildShell();
+    await updateList('');
+  }
+
+  // Шелл (шапка + поле поиска) строится один раз за открытие: пересборка
+  // фокусного инпута посреди IME-композиции даёт дубли букв и дрожание.
+  function buildShell() {
+    screen.innerHTML = `
+      <div class="contacts-screen">
+        <div class="contacts-header">
+          <button class="icon-btn" data-action="back" aria-label="Назад">${icons.chevronLeft}</button>
+          <span class="contacts-title">Контакты</span>
+          <span class="contacts-count" data-count></span>
+        </div>
+        <div class="contacts-search">
+          <span class="contacts-search__icon">${icons.search}</span>
+          <input data-field="search" type="text" placeholder="Поиск контактов"
+            autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        </div>
+        <div class="contacts-list"></div>
+      </div>
+    `;
+    screen.querySelector('[data-action="back"]').addEventListener('click', () => close());
+    const searchInput = screen.querySelector('[data-field="search"]');
+    let inputTimer = null;
+    searchInput.addEventListener('input', () => {
+      if (inputTimer) clearTimeout(inputTimer);
+      inputTimer = setTimeout(() => {
+        inputTimer = null;
+        if (screen.hidden) return;
+        updateList(searchInput.value);
+      }, 150);
+    });
   }
 
   function close(viaGesture) {
@@ -66,7 +98,7 @@ export function initContactListScreen({ onOpenContact }) {
     if (!viaGesture) popLayerSilently(LAYER);
   }
 
-  async function render(query, keepFocus) {
+  async function updateList(query) {
     const my = ++seq;
     let list = [];
     try {
@@ -75,61 +107,29 @@ export function initContactListScreen({ onOpenContact }) {
       list = [];
     }
     if (my !== seq || screen.hidden) return;
-    const prevScroller = screen.querySelector('.contacts-list');
-    const keepScroll = prevScroller ? prevScroller.scrollTop : 0;
-    screen.innerHTML = `
-      <div class="contacts-screen">
-        <div class="contacts-header">
-          <button class="icon-btn" data-action="back" aria-label="Назад">${icons.chevronLeft}</button>
-          <span class="contacts-title">Контакты</span>
-          <span class="contacts-count">${list.length}</span>
-        </div>
-        <div class="contacts-search">
-          <span class="contacts-search__icon">${icons.search}</span>
-          <input data-field="search" type="text" placeholder="Поиск контактов"
-            autocomplete="off" value="${escapeAttr(query)}">
-        </div>
-        <div class="contacts-list">
-          ${list.length ? list.map(contactRowTemplate).join('') : `<div class="recents-empty">Контакты не найдены</div>`}
-        </div>
-      </div>
-    `;
-    const searchInput = screen.querySelector('[data-field="search"]');
-    let inputTimer = null;
-    searchInput.addEventListener('input', () => {
-      // Дебаунс: ввод не ждёт пересчёт списка.
-      if (inputTimer) clearTimeout(inputTimer);
-      inputTimer = setTimeout(() => {
-        inputTimer = null;
-        if (screen.hidden) return;
-        render(searchInput.value, true);
-      }, 150);
-    });
-    const scroller = screen.querySelector('.contacts-list');
-    if (scroller) scroller.scrollTop = keepScroll;
-    if (keepFocus) {
-      searchInput.focus();
-      try {
-        searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
-      } catch (_) {
-        // noop
-      }
-    }
-    screen.querySelector('[data-action="back"]').addEventListener('click', () => close());
-    screen.querySelectorAll('[data-contact]').forEach((el) => {
+    const box = screen.querySelector('.contacts-list');
+    if (!box) return;
+    const keepScroll = box.scrollTop;
+    const count = screen.querySelector('[data-count]');
+    if (count) count.textContent = String(list.length);
+    box.innerHTML = list.length
+      ? list.map(contactRowTemplate).join('')
+      : `<div class="recents-empty">Контакты не найдены</div>`;
+    box.scrollTop = keepScroll;
+    box.querySelectorAll('[data-contact]').forEach((el) => {
       const c = list.find((x) => String(x.id) === el.dataset.contact);
       if (!c) return;
       const number = (c.numbers && c.numbers[0]) || '';
       el.addEventListener('click', (e) => {
         if (e.target.closest('[data-call]')) return;
-        onOpenContact?.({ number, contact: c });
+        onOpenMenu?.({ number, contact: c });
       });
       el.querySelector('[data-call]')?.addEventListener('click', () => {
         telephonyAdapter.call(number, c);
       });
     });
     warmPhotoCache(list.filter((c) => c.photoUrl).map((c) => c.photoUrl));
-    swapCachedPhotos(screen);
+    swapCachedPhotos(box);
   }
 
   registerOverlay({ isOpen: () => !screen.hidden, close: () => close(true) });

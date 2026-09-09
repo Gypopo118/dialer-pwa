@@ -343,6 +343,43 @@ public class DialerTelecomPlugin extends Plugin {
         call.resolve(ret);
     }
 
+    // Поверх всех окон (нужно для пробуждения заблокированного телефона
+    // дублем к полноэкранному интенту). Запрашивается один раз при старте.
+    @PluginMethod
+    public void ensureOverlayPermission(PluginCall call) {
+        boolean ok = true;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                if (!android.provider.Settings.canDrawOverlays(getContext())) {
+                    ok = false;
+                    Intent intent = new Intent(
+                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getContext().getPackageName()));
+                    startActivityForResult(call, intent, "onOverlayResult");
+                    return;
+                }
+            } catch (Exception e) {
+                call.reject("overlay request failed: " + e.getMessage());
+                return;
+            }
+        }
+        JSObject ret = new JSObject();
+        ret.put("ok", ok);
+        call.resolve(ret);
+    }
+
+    @ActivityCallback
+    private void onOverlayResult(PluginCall call, ActivityResult result) {
+        boolean ok = true;
+        try {
+            ok = android.provider.Settings.canDrawOverlays(getContext());
+        } catch (Exception ignored) {
+        }
+        JSObject ret = new JSObject();
+        ret.put("ok", ok);
+        call.resolve(ret);
+    }
+
     @PluginMethod
     public void getCurrentCall(PluginCall call) {
         JSObject snap = DialerInCallService.snapshotCurrentCall();

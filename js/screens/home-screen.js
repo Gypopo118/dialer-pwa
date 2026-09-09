@@ -20,7 +20,7 @@ const KEYPAD_LAYOUT = [
 const SIDE_COL = ['search', 'add-contact', 'plus', 'contacts'];
 const KEYBOARD_LAYER = 'keyboard';
 
-export function initHomeScreen({ contextMenu, onOpenContact }) {
+export function initHomeScreen({ contextMenu }) {
   const recentsEl = document.getElementById('recents');
   const searchBar = document.getElementById('search-bar');
   const searchInput = document.getElementById('search-input');
@@ -388,7 +388,7 @@ export function initHomeScreen({ contextMenu, onOpenContact }) {
       const number = (c.numbers && c.numbers[0]) || '';
       el.addEventListener('click', (e) => {
         if (e.target.closest('[data-call]')) return;
-        onOpenContact?.({ number, contact: c });
+        contextMenu.open({ number, contact: c });
       });
       el.querySelector('[data-call]')?.addEventListener('click', () => {
         telephonyAdapter.call(number, c);
