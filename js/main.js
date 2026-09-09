@@ -5,7 +5,7 @@ import { initCallScreen } from './screens/call-screen.js';
 import { initContextMenu } from './components/context-menu.js';
 import { contactsAdapter } from './adapters/contacts-adapter.js';
 import { nativeBridge } from './adapters/native-bridge.js';
-import { initNativeTelephony } from './adapters/telephony-adapter.js';
+import { initNativeTelephony, syncNativeCallState } from './adapters/telephony-adapter.js';
 import { initContactForm } from './components/contact-form.js';
 import { initNativeBackButton } from './utils/back-stack.js';
 import { uiStore } from './store.js';
@@ -110,6 +110,8 @@ window.addEventListener('dialer:add-contact-blank', (e) => {
     await App.addListener('resume', () => {
       home.refreshRecents();
       contactHistoryScreen.refresh();
+      // Возврат из уведомления о звонке: показать живой экран приёма/разговора.
+      syncNativeCallState().catch(() => {});
     });
   } catch (_) {
     // noop

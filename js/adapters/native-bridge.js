@@ -79,6 +79,16 @@ export const nativeBridge = {
     return getPlugin().setMicMuted({ muted: !!muted });
   },
 
+  async getCurrentCall() {
+    const p = getPlugin();
+    if (!p) return null;
+    try {
+      return await p.getCurrentCall();
+    } catch (_) {
+      return null;
+    }
+  },
+
   async ensureNotifications() {
     const p = getPlugin();
     if (!p) return null;

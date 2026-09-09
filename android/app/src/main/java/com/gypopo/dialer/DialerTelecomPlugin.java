@@ -324,6 +324,16 @@ public class DialerTelecomPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getCurrentCall(PluginCall call) {
+        JSObject snap = DialerInCallService.snapshotCurrentCall();
+        if (snap == null) {
+            call.reject("no call");
+            return;
+        }
+        call.resolve(snap);
+    }
+
+    @PluginMethod
     public void getContacts(PluginCall call) {
         if (getPermissionState("contacts") != PermissionState.GRANTED) {
             requestPermissionForAliases(new String[]{"contacts"}, call, "onContactsPerms");

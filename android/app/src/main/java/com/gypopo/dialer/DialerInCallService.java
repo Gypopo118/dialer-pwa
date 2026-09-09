@@ -103,12 +103,40 @@ public class DialerInCallService extends InCallService {
     }
 
     private String numberOf(Call call) {
+        return numberOfCall(call);
+    }
+
+    private static String numberOfCall(Call call) {
         try {
             Uri handle = call.getDetails().getHandle();
             if (handle != null) return handle.getSchemeSpecificPart();
         } catch (Exception ignored) {
         }
         return "";
+    }
+
+    // Снапшот живого звонка для WebView, стартовавшего позже события
+    // (приложение было убито/свёрнуто, экран заблокирован): позволяет
+    // сразу показать экран приёма/разговора, а не главную.
+    static JSObject snapshotCurrentCall() {
+        if (instance == null) return null;
+        Call c = firstLiveCall();
+        if (c == null) return null;
+        int s = c.getState();
+        String event;
+        if (s == Call.STATE_RINGING) {
+            event = "ringing-incoming";
+        } else if (s == Call.STATE_DIALING || s == Call.STATE_CONNECTING) {
+            event = "dialing";
+        } else if (s == Call.STATE_ACTIVE) {
+            event = "active";
+        } else {
+            return null;
+        }
+        JSObject data = new JSObject();
+        data.put("event", event);
+        data.put("number", numberOfCall(c));
+        return data;
     }
 
     private static Call firstLiveCall() {

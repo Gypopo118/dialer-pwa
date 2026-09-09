@@ -26,6 +26,18 @@
   caret-color: var(--accent-call);
 }
 .search-bar input::placeholder { color: var(--text-tertiary); }
+/* Броня от светлой системной темы полей: поле всегда тёмное, без рамок */
+.search-bar input,
+.contacts-search input,
+.form-field__input,
+.dial-input {
+  background-color: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  border: 0;
+  filter: none;
+}
 .search-bar .icon-btn { color: var(--text-secondary); }
 
 /* ===== История звонков ===== */

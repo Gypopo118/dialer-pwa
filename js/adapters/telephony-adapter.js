@@ -92,6 +92,27 @@ export async function initNativeTelephony() {
   } catch (_) {
     // События недоступны — исходящие всё равно идут через placeCall.
   }
+  // WebView мог стартовать позже звонка (приложение убито/свёрнуто):
+  // подтягиваем живое состояние, чтобы показать экран приёма/разговора.
+  try {
+    await syncNativeCallState();
+  } catch (_) {
+    // noop
+  }
+  return true;
+}
+
+export async function syncNativeCallState() {
+  if (!nativeMode) return false;
+  let snap = null;
+  try {
+    snap = await nativeBridge.getCurrentCall();
+  } catch (_) {
+    return false;
+  }
+  if (!snap || !snap.event || snap.event === 'other') return false;
+  if (snap.event === 'disconnected' || snap.event === 'silenced') return false;
+  await handleNativeEvent(snap);
   return true;
 }
 

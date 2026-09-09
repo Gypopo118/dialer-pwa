@@ -9,6 +9,7 @@ html, body {
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
   user-select: none;
+  color-scheme: dark;
 }
 body {
   overflow: hidden;
