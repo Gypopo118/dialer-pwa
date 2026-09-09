@@ -1,6 +1,7 @@
 import { icons } from '../utils/icons.js';
 import { telephonyAdapter } from '../adapters/telephony-adapter.js';
-import { formatDuration, formatPhoneForDisplay, initialsFromName } from '../utils/format.js';
+import { formatDuration, formatPhoneForDisplay } from '../utils/format.js';
+import { avatarHtml } from '../utils/photo-cache.js';
 import { pushLayer, popLayerSilently, registerOverlay } from '../utils/back-stack.js';
 
 const LAYER = 'call-screen';
@@ -41,9 +42,11 @@ export function initCallScreen() {
     }[state.status] || '';
 
     const displayName = state.contactName || 'Неизвестный номер';
-    const avatarContent = state.photoUrl
-      ? `<img src="${state.photoUrl}" alt="">`
-      : (state.contactName ? initialsFromName(state.contactName) : icons.person);
+    const avatarContent = avatarHtml({
+      name: state.contactName,
+      photoUrl: state.photoUrl,
+      fallbackHtml: icons.person,
+    });
 
     root.innerHTML = `
       <div class="call-screen__status">${statusText}</div>

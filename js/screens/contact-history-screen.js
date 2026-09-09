@@ -5,8 +5,9 @@ import { telephonyAdapter } from '../adapters/telephony-adapter.js';
 import { nativeBridge } from '../adapters/native-bridge.js';
 import { blockedStore } from '../blocked-store.js';
 import {
-  formatPhoneForDisplay, formatDuration, formatClockTime, formatDayLabel, initialsFromName,
+  formatPhoneForDisplay, formatDuration, formatClockTime, formatDayLabel,
 } from '../utils/format.js';
+import { avatarHtml, warmPhotoCache, swapCachedPhotos } from '../utils/photo-cache.js';
 import { pushLayer, popLayerSilently, registerOverlay } from '../utils/back-stack.js';
 
 const LAYER = 'contact-history';
@@ -54,7 +55,7 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
           <div class="contact-header__top">
             <button class="icon-btn" data-action="back">${icons.chevronLeft}</button>
           </div>
-          <div class="contact-header__avatar">${isKnown ? initialsFromName(contact.name) : icons.person}</div>
+          <div class="contact-header__avatar">${avatarHtml({ name: isKnown ? contact.name : null, photoUrl: isKnown ? contact.photoUrl : null, fallbackHtml: icons.person })}</div>
           <div class="contact-header__name" data-field="name" ${inlineEditable ? 'contenteditable="true"' : ''}>${isKnown ? contact.name : formatPhoneForDisplay(number)}</div>
           ${isKnown ? `<div class="contact-header__number" data-field="number" ${inlineEditable ? 'contenteditable="true"' : ''}>${formatPhoneForDisplay(number)}</div>` : ''}
           <div class="contact-header__actions">
@@ -96,6 +97,8 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
       onContactChanged?.();
       render();
     });
+    if (contact && contact.photoUrl) warmPhotoCache([contact.photoUrl]);
+    swapCachedPhotos(screen);
 
     const nameField = screen.querySelector('[data-field="name"]');
     nameField?.addEventListener('blur', async () => {

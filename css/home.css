@@ -81,6 +81,23 @@
 }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .avatar svg { width: 18px; height: 18px; flex-shrink: 0; }
+.avatar { position: relative; }
+.avatar__face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+.avatar__face svg { width: 18px; height: 18px; flex-shrink: 0; }
+.avatar__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
 
 .recent-main {
   flex: 1;

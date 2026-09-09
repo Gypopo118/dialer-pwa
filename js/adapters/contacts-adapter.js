@@ -39,13 +39,33 @@ function saveStore(list) {
 
 let contacts = loadStore();
 
+// Кэш провайдера: чтение контактов — самая тяжёлая операция (нативный
+// IPC + обход провайдера), поэтому при быстром наборе берём из памяти.
+// Сбрасывается при resume и после правок в системном редакторе.
+let sysKnown = false;
+let sysCache = null;
+
+async function systemContacts() {
+  if (sysKnown) return sysCache;
+  sysKnown = true;
+  let list = null;
+  try {
+    const sys = await nativeBridge.getContacts();
+    if (sys && Array.isArray(sys.contacts)) list = sys.contacts;
+  } catch (_) {
+    list = null;
+  }
+  sysCache = list;
+  return sysCache;
+}
+
 export const contactsAdapter = {
   // В APK — контакты устройства (включая синхронизированные Google).
   // В браузере — локальные моки.
   async getAll() {
-    const sys = await nativeBridge.getContacts();
-    if (sys && Array.isArray(sys.contacts)) {
-      const sysList = sys.contacts
+    const raw = await systemContacts();
+    if (raw) {
+      const sysList = raw
         .filter((c) => c.number)
         .map((c) => ({
           id: c.id,
@@ -63,6 +83,13 @@ export const contactsAdapter = {
       return [...sysList, ...localOnly.map((c) => ({ ...c, numbers: [...(c.numbers || [])] }))];
     }
     return contacts.map((c) => ({ ...c }));
+  },
+
+  // Сброс кэша провайдера: вызывать при resume и после правок
+  // в системном редакторе, чтобы подхватить свежие данные.
+  async refreshCache() {
+    sysKnown = false;
+    sysCache = null;
   },
 
   async findByNumber(number) {

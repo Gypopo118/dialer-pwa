@@ -35,6 +35,7 @@ async function openAddContact({ name = '', number = '', numberEditable = false }
   try {
     if (await nativeBridge.isAvailable()) {
       await nativeBridge.openContactEditor({ name, number });
+      await contactsAdapter.refreshCache();
       home.refreshRecents();
       contactHistoryScreen.refresh();
       return;
@@ -55,6 +56,7 @@ async function openEditContact(row) {
       const m = /^device-(\d+)$/.exec(contact.id || '');
       if (m) {
         await nativeBridge.openContactEditorForEdit({ contactId: m[1] });
+        await contactsAdapter.refreshCache();
         home.refreshRecents();
         contactHistoryScreen.refresh();
         return;
@@ -108,6 +110,7 @@ window.addEventListener('dialer:add-contact-blank', (e) => {
       || (typeof cap.registerPlugin === 'function' ? cap.registerPlugin('App') : null);
     if (!App || typeof App.addListener !== 'function') return;
     await App.addListener('resume', () => {
+      contactsAdapter.refreshCache();
       home.refreshRecents();
       contactHistoryScreen.refresh();
       // Возврат из уведомления о звонке: показать живой экран приёма/разговора.

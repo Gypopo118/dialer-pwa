@@ -6,7 +6,8 @@ import { buildRecentsList, filterRecents } from '../recents-model.js';
 import { contactsAdapter } from '../adapters/contacts-adapter.js';
 import { callLogAdapter } from '../adapters/call-log-adapter.js';
 import { telephonyAdapter } from '../adapters/telephony-adapter.js';
-import { formatPhoneForDisplay, formatDuration, formatRelativeTime, initialsFromName, normalizeNumber } from '../utils/format.js';
+import { formatPhoneForDisplay, formatDuration, formatRelativeTime, normalizeNumber } from '../utils/format.js';
+import { avatarHtml, warmPhotoCache, swapCachedPhotos } from '../utils/photo-cache.js';
 import { attachListScrollGesture } from '../utils/list-scroll-gesture.js';
 import { pushLayer, popLayerSilently, registerOverlay } from '../utils/back-stack.js';
 
@@ -68,7 +69,7 @@ export function initHomeScreen({ contextMenu, onOpenContact }) {
     // Набранные цифры вживую фильтруют историю (smart dial).
     if (state.dialInput !== lastDialFilter) {
       lastDialFilter = state.dialInput;
-      renderRecents();
+      scheduleRender();
     }
   });
   dialInput.value = uiStore.get().dialInput || '';
@@ -153,7 +154,7 @@ export function initHomeScreen({ contextMenu, onOpenContact }) {
   });
   searchInput.addEventListener('input', () => {
     uiStore.set({ searchQuery: searchInput.value });
-    renderRecents();
+    scheduleRender(150);
   });
   document.getElementById('search-close').addEventListener('click', closeSearch);
   registerOverlay({ isOpen: () => uiStore.get().searchOpen, close: () => closeSearch(true) });
@@ -295,6 +296,18 @@ export function initHomeScreen({ contextMenu, onOpenContact }) {
 
   // ===== Список недавних =====
   let renderSeq = 0;
+  let lastRecentsHtml = '';
+
+  // Ввод не ждёт фильтр: цифра ложится в поле синхронно, а тяжёлый
+  // пересчёт списка едет с дебаунсом после паузы в наборе.
+  let renderTimer = null;
+  function scheduleRender(delay = 180) {
+    if (renderTimer) clearTimeout(renderTimer);
+    renderTimer = setTimeout(() => {
+      renderTimer = null;
+      renderRecents();
+    }, delay);
+  }
 
   async function refreshRecents() {
     allRows = await buildRecentsList();
@@ -335,15 +348,23 @@ export function initHomeScreen({ contextMenu, onOpenContact }) {
     if (seq !== renderSeq) return;
     const hasFilter = (searchOpen && q) || digits;
     if (!rows.length && !matchedContacts.length) {
+      lastRecentsHtml = '';
       recentsEl.innerHTML = `<div class="recents-empty">${hasFilter ? 'Ничего не найдено' : 'Пока нет истории звонков'}</div>`;
       return;
     }
-    recentsEl.innerHTML = rows.map(rowTemplate).join('')
+    const html = rows.map(rowTemplate).join('')
       + (matchedContacts.length
         ? `<div class="recents-group-label">Контакты</div>` + matchedContacts.map(contactRowTemplate).join('')
         : '');
+    // Тот же HTML повторно не трогаем: слушатели живы, скролл не прыгает.
+    if (html === lastRecentsHtml) return;
+    lastRecentsHtml = html;
+    const keepScroll = recentsEl.scrollTop;
+    recentsEl.innerHTML = html;
+    recentsEl.scrollTop = keepScroll;
     bindHistoryRows(rows);
     bindContactRows(matchedContacts);
+    afterRenderPhotos(rows, matchedContacts);
   }
 
   function bindHistoryRows(rows) {
@@ -375,13 +396,29 @@ export function initHomeScreen({ contextMenu, onOpenContact }) {
     });
   }
 
+  function afterRenderPhotos(rows, matchedContacts) {
+    const urls = [];
+    rows.forEach((r) => {
+      if (r.contact && r.contact.photoUrl) urls.push(r.contact.photoUrl);
+    });
+    matchedContacts.forEach((c) => {
+      if (c.photoUrl) urls.push(c.photoUrl);
+    });
+    warmPhotoCache(urls);
+    swapCachedPhotos(recentsEl);
+  }
+
   function rowTemplate(row) {
     const isKnown = !!row.contact;
     const arrow = row.lastType === 'outgoing' ? icons.arrowOut : row.lastType === 'incoming' ? icons.arrowIn : icons.arrowMissed;
     const colorClass = `call-arrow--${row.lastType === 'missed' ? 'missed' : row.lastType === 'incoming' ? 'in' : 'out'}`;
     const primaryText = isKnown ? row.contact.name : formatPhoneForDisplay(row.number);
     const secondaryText = isKnown ? formatPhoneForDisplay(row.number) : null;
-    const avatarContent = isKnown ? initialsFromName(row.contact.name) : icons.person;
+    const avatarContent = avatarHtml({
+      name: isKnown ? row.contact.name : null,
+      photoUrl: isKnown ? row.contact.photoUrl : null,
+      fallbackHtml: icons.person,
+    });
 
     return `
       <div class="recent-row" data-key="${row.key}">

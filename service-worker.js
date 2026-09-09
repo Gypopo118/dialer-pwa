@@ -29,6 +29,7 @@ const SHELL_FILES = [
   './js/components/contact-form.js',
   './js/utils/format.js',
   './js/utils/icons.js',
+  './js/utils/photo-cache.js',
   './js/utils/back-stack.js',
   './js/utils/list-scroll-gesture.js',
   './icons/icon-192.png',

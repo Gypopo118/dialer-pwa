@@ -12,7 +12,8 @@ import { icons } from '../utils/icons.js';
 import { contactsAdapter } from '../adapters/contacts-adapter.js';
 import { telephonyAdapter } from '../adapters/telephony-adapter.js';
 import { blockedStore } from '../blocked-store.js';
-import { formatPhoneForDisplay, initialsFromName } from '../utils/format.js';
+import { formatPhoneForDisplay } from '../utils/format.js';
+import { avatarHtml, warmPhotoCache, swapCachedPhotos } from '../utils/photo-cache.js';
 import { pushLayer, popLayerSilently, registerOverlay } from '../utils/back-stack.js';
 
 const LAYER = 'contact-list';
@@ -27,9 +28,10 @@ function escapeAttr(s) {
 
 export function contactRowTemplate(c) {
   const number = (c.numbers && c.numbers[0]) || '';
+  const avatar = avatarHtml({ name: c.name, photoUrl: c.photoUrl, fallbackHtml: icons.person });
   return `
     <div class="recent-row" data-contact="${c.id}">
-      <div class="avatar">${initialsFromName(c.name || '?')}</div>
+      <div class="avatar">${avatar}</div>
       <div class="recent-main">
         <div class="recent-line1">
           <span class="recent-name">${c.name || formatPhoneForDisplay(number)}</span>
@@ -73,6 +75,8 @@ export function initContactListScreen({ onOpenContact }) {
       list = [];
     }
     if (my !== seq || screen.hidden) return;
+    const prevScroller = screen.querySelector('.contacts-list');
+    const keepScroll = prevScroller ? prevScroller.scrollTop : 0;
     screen.innerHTML = `
       <div class="contacts-screen">
         <div class="contacts-header">
@@ -91,7 +95,18 @@ export function initContactListScreen({ onOpenContact }) {
       </div>
     `;
     const searchInput = screen.querySelector('[data-field="search"]');
-    searchInput.addEventListener('input', () => render(searchInput.value, true));
+    let inputTimer = null;
+    searchInput.addEventListener('input', () => {
+      // Дебаунс: ввод не ждёт пересчёт списка.
+      if (inputTimer) clearTimeout(inputTimer);
+      inputTimer = setTimeout(() => {
+        inputTimer = null;
+        if (screen.hidden) return;
+        render(searchInput.value, true);
+      }, 150);
+    });
+    const scroller = screen.querySelector('.contacts-list');
+    if (scroller) scroller.scrollTop = keepScroll;
     if (keepFocus) {
       searchInput.focus();
       try {
@@ -113,6 +128,8 @@ export function initContactListScreen({ onOpenContact }) {
         telephonyAdapter.call(number, c);
       });
     });
+    warmPhotoCache(list.filter((c) => c.photoUrl).map((c) => c.photoUrl));
+    swapCachedPhotos(screen);
   }
 
   registerOverlay({ isOpen: () => !screen.hidden, close: () => close(true) });
