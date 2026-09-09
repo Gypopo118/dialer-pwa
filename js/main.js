@@ -135,6 +135,14 @@ window.addEventListener('dialer:add-contact-blank', (e) => {
       try {
         await nativeBridge.ensureNotifications();
       } catch (_) { /* noop */ }
+      // Android 14+: проверяем право на полноэкранные уведомления. Без него
+      // заблокированный телефон не разбудить — только плашка в шторке.
+      try {
+        const fsi = await nativeBridge.canUseFullScreenIntent();
+        if (fsi && fsi.ok === false) {
+          console.warn('[dialer] full-screen notifications disabled: allow in app settings');
+        }
+      } catch (_) { /* noop */ }
       // Просим роль при каждом запуске, пока не назначены: без неё
       // Android не отдаёт звонки нашему InCallService и показывает чужой UI.
       try {

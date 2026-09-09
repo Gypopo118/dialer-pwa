@@ -7,6 +7,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.os.Build;
+import android.os.PowerManager;
 import android.telecom.Call;
 import android.telecom.CallAudioState;
 import android.telecom.InCallService;
@@ -35,6 +36,7 @@ public class DialerInCallService extends InCallService {
     private static DialerInCallService instance;
 
     private final List<Call> calls = new ArrayList<>();
+    private PowerManager.WakeLock proximityLock;
 
     static void setPlugin(DialerTelecomPlugin p) {
         plugin = p;
@@ -49,6 +51,7 @@ public class DialerInCallService extends InCallService {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        releaseProximity();
         if (instance == this) instance = null;
     }
 
@@ -71,6 +74,7 @@ public class DialerInCallService extends InCallService {
         super.onCallRemoved(call);
         calls.remove(call);
         cancelNotifications();
+        releaseProximity();
         JSObject data = new JSObject();
         data.put("event", "disconnected");
         data.put("number", numberOf(call));
@@ -90,9 +94,11 @@ public class DialerInCallService extends InCallService {
             event = "active";
             cancelNotification(NOTIF_INCOMING);
             showOngoingNotification(call);
+            acquireProximity();
         } else if (state == Call.STATE_DISCONNECTED || state == Call.STATE_DISCONNECTING) {
             event = "disconnected";
             cancelNotifications();
+            releaseProximity();
         } else {
             event = "other";
         }
@@ -229,6 +235,7 @@ public class DialerInCallService extends InCallService {
             if (nm == null) return;
             NotificationChannel incoming = new NotificationChannel(
                 CHANNEL_INCOMING, "Входящие звонки", NotificationManager.IMPORTANCE_HIGH);
+            incoming.setLockScreenVisibility(Notification.VISIBILITY_PUBLIC);
             nm.createNotificationChannel(incoming);
             NotificationChannel ongoing = new NotificationChannel(
                 CHANNEL_ONGOING, "Текущий звонок", NotificationManager.IMPORTANCE_DEFAULT);
@@ -262,9 +269,9 @@ public class DialerInCallService extends InCallService {
                 .setContentText("Нажмите, чтобы ответить")
                 .setCategory(NotificationCompat.CATEGORY_CALL)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setFullScreenIntent(openAppIntent(), true)
                 .setContentIntent(openAppIntent())
-                .setOngoing(true)
                 .addAction(android.R.drawable.sym_action_call, "Принять",
                     actionIntent(DialerCallActionReceiver.ACTION_ANSWER, 2001))
                 .addAction(android.R.drawable.sym_call_missed, "Отклонить",
@@ -313,5 +320,28 @@ public class DialerInCallService extends InCallService {
     private void cancelNotifications() {
         cancelNotification(NOTIF_INCOMING);
         cancelNotification(NOTIF_ONGOING);
+    }
+
+    // ---------- Датчик приближения: экран гаснет у уха ----------
+
+    private void acquireProximity() {
+        try {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            if (pm == null) return;
+            if (proximityLock == null) {
+                proximityLock = pm.newWakeLock(
+                    PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "dialer:proximity");
+                proximityLock.setReferenceCounted(false);
+            }
+            if (!proximityLock.isHeld()) proximityLock.acquire(10 * 60 * 1000L);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void releaseProximity() {
+        try {
+            if (proximityLock != null && proximityLock.isHeld()) proximityLock.release();
+        } catch (Exception ignored) {
+        }
     }
 }

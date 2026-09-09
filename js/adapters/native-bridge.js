@@ -79,6 +79,16 @@ export const nativeBridge = {
     return getPlugin().setMicMuted({ muted: !!muted });
   },
 
+  async canUseFullScreenIntent() {
+    const p = getPlugin();
+    if (!p) return null;
+    try {
+      return await p.canUseFullScreenIntent();
+    } catch (_) {
+      return null;
+    }
+  },
+
   async getCurrentCall() {
     const p = getPlugin();
     if (!p) return null;

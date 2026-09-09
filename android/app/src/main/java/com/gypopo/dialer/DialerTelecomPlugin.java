@@ -2,6 +2,7 @@ package com.gypopo.dialer;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.NotificationManager;
 import android.app.role.RoleManager;
 import android.content.ContentUris;
 import android.content.Context;
@@ -320,6 +321,25 @@ public class DialerTelecomPlugin extends Plugin {
     private void onNotificationsPerms(PluginCall call) {
         JSObject ret = new JSObject();
         ret.put("ok", getPermissionState("notifications") == PermissionState.GRANTED);
+        call.resolve(ret);
+    }
+
+    // Android 14+: может ли приложение слать полноэкранные интенты.
+    // Если false — система показывает только плашку, будить не будет:
+    // пользователю нужно разрешить в настройках приложения.
+    @PluginMethod
+    public void canUseFullScreenIntent(PluginCall call) {
+        boolean ok = true;
+        if (Build.VERSION.SDK_INT >= 34) {
+            try {
+                NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+                if (nm != null) ok = nm.canUseFullScreenIntent();
+            } catch (Exception e) {
+                ok = false;
+            }
+        }
+        JSObject ret = new JSObject();
+        ret.put("ok", ok);
         call.resolve(ret);
     }
 
