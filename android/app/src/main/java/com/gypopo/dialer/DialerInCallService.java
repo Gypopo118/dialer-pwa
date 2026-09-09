@@ -235,7 +235,7 @@ public class DialerInCallService extends InCallService {
             if (nm == null) return;
             NotificationChannel incoming = new NotificationChannel(
                 CHANNEL_INCOMING, "Входящие звонки", NotificationManager.IMPORTANCE_HIGH);
-            incoming.setLockScreenVisibility(Notification.VISIBILITY_PUBLIC);
+            incoming.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             nm.createNotificationChannel(incoming);
             NotificationChannel ongoing = new NotificationChannel(
                 CHANNEL_ONGOING, "Текущий звонок", NotificationManager.IMPORTANCE_DEFAULT);
