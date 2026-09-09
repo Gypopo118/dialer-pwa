@@ -1,5 +1,5 @@
 import { icons } from '../utils/icons.js';
-import { pushLayer, popLayerSilently } from '../utils/back-stack.js';
+import { pushLayer, popLayerSilently, registerOverlay } from '../utils/back-stack.js';
 import { contactsAdapter } from '../adapters/contacts-adapter.js';
 import { callLogAdapter } from '../adapters/call-log-adapter.js';
 import { blockedStore } from '../blocked-store.js';
@@ -71,6 +71,7 @@ export function initContextMenu({ onOpenHistory, onOpenAddContact, onOpenEditCon
   }
 
   scrim.addEventListener('click', () => { if (currentRow) close(); });
+  registerOverlay({ isOpen: () => !!currentRow, close: () => close(true) });
 
   return { open };
 }

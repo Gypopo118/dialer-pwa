@@ -19,7 +19,7 @@
 
 import { mockContacts } from '../mock-data.js';
 import { nativeBridge } from './native-bridge.js';
-import { normalizeNumber, normalizeText } from '../utils/format.js';
+import { normalizeNumber, normalizeText, numbersEqual } from '../utils/format.js';
 
 const STORAGE_KEY = 'dialer.contacts.v1';
 
@@ -66,9 +66,8 @@ export const contactsAdapter = {
   },
 
   async findByNumber(number) {
-    const norm = number.replace(/[^\d+]/g, '');
     const all = await this.getAll();
-    return all.find((c) => (c.numbers || []).some((n) => (n || '').replace(/[^\d+]/g, '') === norm)) || null;
+    return all.find((c) => (c.numbers || []).some((n) => numbersEqual(n, number))) || null;
   },
 
   async search(query) {
@@ -119,14 +118,17 @@ export const contactsAdapter = {
       console.info('[contactsAdapter] syncFromDevice: нативного слоя нет, пропуск.');
       return { imported: 0 };
     }
-    const known = new Set();
-    contacts.forEach((c) => (c.numbers || []).forEach((n) => known.add((n || '').replace(/[^\d+]/g, ''))));
+    const known = [];
+    contacts.forEach((c) => (c.numbers || []).forEach((n) => {
+      const norm = (n || '').replace(/[^\d+]/g, '');
+      if (norm && !known.some((k) => numbersEqual(k, norm))) known.push(norm);
+    }));
     let imported = 0;
     for (const dc of sys.contacts) {
       if (!dc.number) continue;
       const norm = (dc.number || '').replace(/[^\d+]/g, '');
-      if (!norm || known.has(norm)) continue;
-      known.add(norm);
+      if (!norm || known.some((k) => numbersEqual(k, norm))) continue;
+      known.push(norm);
       contacts.push({
         id: dc.id || `device-${Date.now()}-${imported}`,
         name: dc.name || dc.number,

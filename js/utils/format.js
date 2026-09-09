@@ -58,3 +58,14 @@ export function normalizeText(s) {
 export function normalizeNumber(number) {
   return number.replace(/[^\d+]/g, '');
 }
+
+// Сравнение номеров по хвосту цифр: оператор шлёт то в локальном формате
+// (0533...), то в международном (+373...), а в контактах лежит один вариант.
+export function numbersEqual(a, b, tail = 8) {
+  const da = String(a || '').replace(/\D/g, '');
+  const db = String(b || '').replace(/\D/g, '');
+  if (!da || !db) return false;
+  if (da === db) return true;
+  if (da.length < tail || db.length < tail) return false;
+  return da.slice(-tail) === db.slice(-tail);
+}

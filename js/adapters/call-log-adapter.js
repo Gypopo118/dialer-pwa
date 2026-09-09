@@ -16,6 +16,7 @@
 
 import { mockCallLog } from '../mock-data.js';
 import { nativeBridge } from './native-bridge.js';
+import { numbersEqual } from '../utils/format.js';
 
 const STORAGE_KEY = 'dialer.calllog.v1';
 const listeners = new Set();
@@ -59,10 +60,9 @@ export const callLogAdapter = {
   },
 
   async getEntriesForNumber(number) {
-    const norm = number.replace(/[^\d+]/g, '');
     const all = await this.getEntries();
     return all
-      .filter((e) => (e.number || '').replace(/[^\d+]/g, '') === norm)
+      .filter((e) => numbersEqual(e.number || '', number))
       .sort((a, b) => b.timestamp - a.timestamp);
   },
 

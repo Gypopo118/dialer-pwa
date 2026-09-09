@@ -8,7 +8,7 @@ import { callLogAdapter } from '../adapters/call-log-adapter.js';
 import { telephonyAdapter } from '../adapters/telephony-adapter.js';
 import { formatPhoneForDisplay, formatDuration, formatRelativeTime, initialsFromName, normalizeNumber } from '../utils/format.js';
 import { attachListScrollGesture } from '../utils/list-scroll-gesture.js';
-import { pushLayer, popLayerSilently } from '../utils/back-stack.js';
+import { pushLayer, popLayerSilently, registerOverlay } from '../utils/back-stack.js';
 
 const KEYPAD_LAYOUT = [
   ['1', '2', '3'],
@@ -156,6 +156,7 @@ export function initHomeScreen({ contextMenu, onOpenContact }) {
     renderRecents();
   });
   document.getElementById('search-close').addEventListener('click', closeSearch);
+  registerOverlay({ isOpen: () => uiStore.get().searchOpen, close: () => closeSearch(true) });
   function closeSearch(viaGesture) {
     if (!uiStore.get().searchOpen) return;
     uiStore.set({ searchOpen: false, searchQuery: '' });

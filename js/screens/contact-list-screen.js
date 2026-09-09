@@ -13,7 +13,7 @@ import { contactsAdapter } from '../adapters/contacts-adapter.js';
 import { telephonyAdapter } from '../adapters/telephony-adapter.js';
 import { blockedStore } from '../blocked-store.js';
 import { formatPhoneForDisplay, initialsFromName } from '../utils/format.js';
-import { pushLayer, popLayerSilently } from '../utils/back-stack.js';
+import { pushLayer, popLayerSilently, registerOverlay } from '../utils/back-stack.js';
 
 const LAYER = 'contact-list';
 
@@ -114,6 +114,8 @@ export function initContactListScreen({ onOpenContact }) {
       });
     });
   }
+
+  registerOverlay({ isOpen: () => !screen.hidden, close: () => close(true) });
 
   return { open, close };
 }

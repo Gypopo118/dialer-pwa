@@ -53,6 +53,15 @@
             <meta-data android:name="android.telecom.IN_CALL_SERVICE_UI" android:value="true" />
         </service>
 
+        <receiver
+            android:name=".DialerCallActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.gypopo.dialer.ANSWER_CALL" />
+                <action android:name="com.gypopo.dialer.DECLINE_CALL" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

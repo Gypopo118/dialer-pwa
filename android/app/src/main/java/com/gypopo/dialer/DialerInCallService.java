@@ -237,6 +237,13 @@ public class DialerInCallService extends InCallService {
         }
     }
 
+    private PendingIntent actionIntent(String action, int requestCode) {
+        Intent intent = new Intent(this, DialerCallActionReceiver.class);
+        intent.setAction(action);
+        return PendingIntent.getBroadcast(
+            this, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
+
     private PendingIntent openAppIntent() {
         Intent intent = new Intent(this, MainActivity.class);
         intent.setAction("com.gypopo.dialer.OPEN_CALL");
@@ -257,6 +264,11 @@ public class DialerInCallService extends InCallService {
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setFullScreenIntent(openAppIntent(), true)
                 .setContentIntent(openAppIntent())
+                .setOngoing(true)
+                .addAction(android.R.drawable.sym_action_call, "Принять",
+                    actionIntent(DialerCallActionReceiver.ACTION_ANSWER, 2001))
+                .addAction(android.R.drawable.sym_call_missed, "Отклонить",
+                    actionIntent(DialerCallActionReceiver.ACTION_DECLINE, 2002))
                 .setAutoCancel(true)
                 .build();
             postNotification(NOTIF_INCOMING, notif);

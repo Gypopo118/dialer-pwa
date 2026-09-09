@@ -1,7 +1,7 @@
 import { icons } from '../utils/icons.js';
 import { telephonyAdapter } from '../adapters/telephony-adapter.js';
 import { formatDuration, formatPhoneForDisplay, initialsFromName } from '../utils/format.js';
-import { pushLayer, popLayerSilently } from '../utils/back-stack.js';
+import { pushLayer, popLayerSilently, registerOverlay } from '../utils/back-stack.js';
 
 const LAYER = 'call-screen';
 
@@ -13,6 +13,14 @@ export function initCallScreen() {
   let lastState = telephonyAdapter.getState();
 
   telephonyAdapter.onStateChange((state) => render(state));
+  registerOverlay({
+    isOpen: () => isOpen,
+    close: () => {
+      // Как жест: сворачиваем UI звонка, сам звонок продолжается.
+      root.classList.remove('call-screen--open');
+      isOpen = false;
+    },
+  });
   render(telephonyAdapter.getState());
 
   function render(state) {

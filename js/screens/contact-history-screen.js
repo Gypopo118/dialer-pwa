@@ -7,7 +7,7 @@ import { blockedStore } from '../blocked-store.js';
 import {
   formatPhoneForDisplay, formatDuration, formatClockTime, formatDayLabel, initialsFromName,
 } from '../utils/format.js';
-import { pushLayer, popLayerSilently } from '../utils/back-stack.js';
+import { pushLayer, popLayerSilently, registerOverlay } from '../utils/back-stack.js';
 
 const LAYER = 'contact-history';
 
@@ -145,6 +145,8 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
     }
     return html;
   }
+
+  registerOverlay({ isOpen: () => !screen.hidden, close: () => close(true) });
 
   return { open, close, refresh };
 

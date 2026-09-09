@@ -7,7 +7,7 @@
 // Использует общие #scrim / #context-sheet, свой слой в back-stack.
 // ============================================================================
 
-import { pushLayer, popLayerSilently } from '../utils/back-stack.js';
+import { pushLayer, popLayerSilently, registerOverlay } from '../utils/back-stack.js';
 
 const LAYER = 'contact-form';
 
@@ -114,6 +114,7 @@ export function initContactForm({ onSaved }) {
   }
 
   scrim.addEventListener('click', () => close());
+  registerOverlay({ isOpen: () => isOpen, close: () => close(true) });
 
   return { open, close };
 }

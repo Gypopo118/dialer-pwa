@@ -22,6 +22,38 @@ export function layerDepth() {
   return stack.length;
 }
 
+// Страховка рассинхрона стека и истории: экраны регистрируют фактическую
+// видимость, и «назад» закроет видимый оверлей, даже если стек пуст.
+const overlayRegistry = [];
+
+export function registerOverlay(handle) {
+  overlayRegistry.push(handle);
+  return () => {
+    const i = overlayRegistry.indexOf(handle);
+    if (i !== -1) overlayRegistry.splice(i, 1);
+  };
+}
+
+function closeTopOverlay() {
+  for (let i = overlayRegistry.length - 1; i >= 0; i--) {
+    let open = false;
+    try {
+      open = overlayRegistry[i].isOpen();
+    } catch (_) {
+      open = false;
+    }
+    if (open) {
+      try {
+        overlayRegistry[i].close();
+      } catch (_) {
+        // noop
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
 // Детерминированно закрывает верхний слой: сразу вызывает его onPop
 // и откатывает history для синхронизации. Не ждёт popstate — поэтому
 // неуязвимо к таймингам доставки события в WebView.
@@ -55,6 +87,7 @@ export async function initNativeBackButton() {
     if (!App || typeof App.addListener !== 'function') return false;
     await App.addListener('backButton', () => {
       if (closeTopLayer()) return;
+      if (closeTopOverlay()) return;
       try {
         App.minimizeApp();
       } catch (_) {
