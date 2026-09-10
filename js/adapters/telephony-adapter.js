@@ -61,6 +61,18 @@ function isNative() {
   return nativeMode;
 }
 
+// Системный CallLog дописывается с задержкой после отбоя: первый опрос
+// часто приходит раньше записи. Дотягиваем список ещё дважды по таймеру.
+function schedulePostCallRefresh() {
+  [1200, 3500].forEach((ms) => setTimeout(() => {
+    try {
+      callLogAdapter.refreshFromSystem();
+    } catch (_) {
+      // noop
+    }
+  }, ms));
+}
+
 // Страховка красной трубки: если 'disconnected' из InCallService не придёт
 // (например, звонок обслужил старый диалер, т.к. мы ещё не default),
 // экран звонка всё равно гаснет и возвращает в список/клавиатуру.
@@ -153,9 +165,11 @@ async function handleNativeEvent(e) {
     setState({ ...base, status: 'active', direction: state.direction || 'outgoing', startedAt: Date.now() });
   } else if (e.event === 'disconnected' || e.event === 'silenced') {
     // Запись уже в системном CallLog — обновляем список и гасим экран звонка.
+    // Плюс дотяжки: провайдер может дописать строку позже нашего опроса.
     try {
       callLogAdapter.refreshFromSystem();
     } catch (_) { /* noop */ }
+    schedulePostCallRefresh();
     telephonyAdapter._reset();
   }
 }

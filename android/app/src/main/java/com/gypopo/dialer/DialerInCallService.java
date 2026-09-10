@@ -90,6 +90,9 @@ public class DialerInCallService extends InCallService {
         if (state == Call.STATE_RINGING) {
             event = "ringing-incoming";
             showIncomingNotification(call);
+            // Датчик берём уже на звонке, а не только на ACTIVE: событие
+            // соединения может прийти позже/раньше UI, а ухо — в любой момент.
+            acquireProximity();
         } else if (state == Call.STATE_DIALING || state == Call.STATE_CONNECTING) {
             event = "dialing";
             cancelNotification(NOTIF_INCOMING);
@@ -347,7 +350,9 @@ public class DialerInCallService extends InCallService {
                     PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "dialer:proximity");
                 proximityLock.setReferenceCounted(false);
             }
-            if (!proximityLock.isHeld()) proximityLock.acquire(10 * 60 * 1000L);
+            // Без таймаута: звонок бывает долгим, а снятие гарантировано
+            // release-ветками и смертью процесса (система отпускает сама).
+            if (!proximityLock.isHeld()) proximityLock.acquire();
         } catch (Exception ignored) {
         }
     }
