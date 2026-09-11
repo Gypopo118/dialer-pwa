@@ -57,6 +57,12 @@ export function initCallScreen() {
       <div class="call-screen__avatar">${avatarContent}</div>
       <div class="call-screen__name">${displayName}</div>
       <div class="call-screen__number">${formatPhoneForDisplay(state.number || '')}</div>
+      ${isIncoming ? `
+      <div class="call-replies">
+        <button class="reply-btn" data-reply="0">Привет, я перезвоню</button>
+        <button class="reply-btn" data-reply="1">Добрый день, я перезвоню</button>
+      </div>
+      ` : ''}
       <div class="call-screen__timer" data-timer ${isActive ? '' : 'hidden'}>00:00</div>
       <div class="call-screen__spacer"></div>
       ${isActive || state.status === 'outgoing-ringing' ? (padOpen ? `
@@ -93,12 +99,6 @@ export function initCallScreen() {
           <button class="call-action-btn call-action-btn--end" data-action="hangup">${icons.hangup}</button>
         `}
       </div>
-      ${isIncoming ? `
-      <div class="call-replies">
-        <button class="reply-btn" data-reply="0">Привет, я перезвоню</button>
-        <button class="reply-btn" data-reply="1">Добрый день, я перезвоню</button>
-      </div>
-      ` : ''}
     `;
 
     root.querySelector('[data-action="answer"]')?.addEventListener('click', () => telephonyAdapter.answer());

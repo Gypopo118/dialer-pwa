@@ -427,23 +427,26 @@
 .call-action-btn--end { background: var(--call-missed); box-shadow: 0 10px 22px rgba(255, 91, 84, 0.35); }
 .call-action-btn:active { transform: translateY(1px); }
 
-/* ===== Быстрые SMS-ответы на входящий ===== */
+/* ===== Быстрые SMS-ответы на входящий: компактно под номером ===== */
 .call-replies {
-  margin-top: 20px;
+  margin-top: 14px;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: 100%;
-  max-width: 300px;
+  gap: 8px;
 }
 .reply-btn {
-  padding: 13px 16px;
+  width: 100%;
+  padding: 10px 18px;
   border-radius: var(--radius-pill);
   background: var(--surface-2);
   box-shadow: var(--shadow-key);
   color: var(--text-primary);
   font-size: var(--fs-secondary);
   text-align: center;
+  white-space: nowrap;
 }
 .reply-btn:active {
   background: var(--surface-2-pressed);
