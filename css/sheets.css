@@ -426,3 +426,26 @@
 .call-action-btn--decline,
 .call-action-btn--end { background: var(--call-missed); box-shadow: 0 10px 22px rgba(255, 91, 84, 0.35); }
 .call-action-btn:active { transform: translateY(1px); }
+
+/* ===== Быстрые SMS-ответы на входящий ===== */
+.call-replies {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 300px;
+}
+.reply-btn {
+  padding: 13px 16px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-key);
+  color: var(--text-primary);
+  font-size: var(--fs-secondary);
+  text-align: center;
+}
+.reply-btn:active {
+  background: var(--surface-2-pressed);
+  transform: translateY(1px);
+}

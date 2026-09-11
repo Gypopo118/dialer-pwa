@@ -28,7 +28,7 @@ function escapeAttr(s) {
 
 export function contactRowTemplate(c) {
   const number = (c.numbers && c.numbers[0]) || '';
-  const avatar = avatarHtml({ name: c.name, photoUrl: c.photoUrl, fallbackHtml: icons.person });
+  const avatar = avatarHtml({ name: c.name, photoUrl: c.photoUrl, contactId: c.id, fallbackHtml: icons.person });
   return `
     <div class="recent-row" data-contact="${c.id}">
       <div class="avatar">${avatar}</div>

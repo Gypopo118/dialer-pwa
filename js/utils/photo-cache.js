@@ -38,15 +38,62 @@ function esc(s) {
 
 // Слоёный аватар: снизу инициалы/силуэт, сверху фото. Нет фото или не
 // загрузилось — остаётся нижний слой, дыр в UI не бывает.
-export function avatarHtml({ name, photoUrl, fallbackHtml }) {
+export function avatarHtml({ name, photoUrl, contactId, fallbackHtml }) {
   const face = name ? esc(initialsFromName(name)) : fallbackHtml;
   if (!photoUrl) return face;
   const safe = esc(photoUrl);
+  const cid = extractNumericId(contactId);
+  const cidAttr = cid ? ` data-contact-id="${cid}"` : '';
   return (
     `<span class="avatar__face">${face}</span>` +
-    `<img class="avatar__img" src="${safe}" data-photo-uri="${safe}" alt="" loading="lazy" onerror="this.remove()">`
+    `<img class="avatar__img" src="${safe}" data-photo-uri="${safe}"${cidAttr} alt="" loading="lazy" onerror="window.__dialerPhotoFallback&&window.__dialerPhotoFallback(this)">`
   );
 }
+
+function extractNumericId(id) {
+  const m = /^device-(\d+)$/.exec(String(id || ''));
+  return m ? m[1] : '';
+}
+
+// Запасной путь: прямой content:// не открылся в WebView — тянем байты
+// через нативный мост (ContentResolver всегда может) и кэшируем в памяти.
+const bridgePhotoCache = new Map();
+
+async function photoFallback(img) {
+  try {
+    if (!img || img.dataset.fb) return;
+    img.dataset.fb = '1';
+    const cid = img.getAttribute('data-contact-id');
+    if (!cid) {
+      img.remove();
+      return;
+    }
+    if (bridgePhotoCache.has(cid)) {
+      const hit = bridgePhotoCache.get(cid);
+      if (hit && img.isConnected) img.src = hit;
+      else img.remove();
+      return;
+    }
+    const { nativeBridge } = await import('../adapters/native-bridge.js');
+    const res = await nativeBridge.getContactPhoto({ contactId: cid });
+    if (res && res.photo && img.isConnected) {
+      const url = 'data:image/jpeg;base64,' + res.photo;
+      bridgePhotoCache.set(cid, url);
+      img.src = url;
+    } else {
+      bridgePhotoCache.set(cid, null);
+      img.remove();
+    }
+  } catch (_) {
+    try {
+      img.remove();
+    } catch (_) {
+      // noop
+    }
+  }
+}
+
+if (typeof window !== 'undefined') window.__dialerPhotoFallback = photoFallback;
 
 export async function getCachedPhotoUrl(uri) {
   if (!uri) return null;

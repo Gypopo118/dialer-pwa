@@ -6,6 +6,9 @@ import { pushLayer, popLayerSilently, registerOverlay } from '../utils/back-stac
 
 const LAYER = 'call-screen';
 
+// Быстрые SMS-ответы на входящий: сброс + моментальная отправка.
+const SMS_REPLIES = ['Привет, я перезвоню', 'Добрый день, я перезвоню'];
+
 export function initCallScreen() {
   const root = document.getElementById('call-screen');
   let timerInterval = null;
@@ -45,6 +48,7 @@ export function initCallScreen() {
     const avatarContent = avatarHtml({
       name: state.contactName,
       photoUrl: state.photoUrl,
+      contactId: state.contactId,
       fallbackHtml: icons.person,
     });
 
@@ -89,11 +93,23 @@ export function initCallScreen() {
           <button class="call-action-btn call-action-btn--end" data-action="hangup">${icons.hangup}</button>
         `}
       </div>
+      ${isIncoming ? `
+      <div class="call-replies">
+        <button class="reply-btn" data-reply="0">Привет, я перезвоню</button>
+        <button class="reply-btn" data-reply="1">Добрый день, я перезвоню</button>
+      </div>
+      ` : ''}
     `;
 
     root.querySelector('[data-action="answer"]')?.addEventListener('click', () => telephonyAdapter.answer());
     root.querySelector('[data-action="decline"]')?.addEventListener('click', () => telephonyAdapter.decline());
     root.querySelector('[data-action="hangup"]')?.addEventListener('click', () => telephonyAdapter.hangUp());
+    root.querySelectorAll('[data-reply]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const text = SMS_REPLIES[Number(btn.dataset.reply)];
+        if (text) telephonyAdapter.declineWithMessage(text);
+      });
+    });
     root.querySelector('[data-toggle="speaker"]')?.addEventListener('click', () =>
       telephonyAdapter.setSpeakerOn(!telephonyAdapter.getState().speakerOn));
     root.querySelector('[data-toggle="mute"]')?.addEventListener('click', () =>

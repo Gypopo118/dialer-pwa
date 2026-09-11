@@ -49,6 +49,7 @@ import com.getcapacitor.annotation.PermissionCallback;
         // Микрофон для самого звонка не нужен (управление идёт через
         // InCallService); алиас оставлен под будущие аудио-функции.
         @Permission(strings = { Manifest.permission.RECORD_AUDIO }, alias = "mic"),
+        @Permission(strings = { Manifest.permission.SEND_SMS }, alias = "sms"),
         @Permission(strings = { Manifest.permission.POST_NOTIFICATIONS }, alias = "notifications")
     }
 )
@@ -409,6 +410,118 @@ public class DialerTelecomPlugin extends Plugin {
             return;
         }
         call.resolve(snap);
+    }
+
+    // SMS-отбой: моментальное SMS звонящему номеру. Отправка напрямую через
+    // SmsManager (default SMS app не требуется); длинные/кириллические тексты
+    // режутся на части автоматически.
+    @PluginMethod
+    public void sendSms(PluginCall call) {
+        String number = call.getString("number", "");
+        String text = call.getString("text", "");
+        if (number.isEmpty() || text.isEmpty()) {
+            call.reject("number and text required");
+            return;
+        }
+        if (getPermissionState("sms") != PermissionState.GRANTED) {
+            requestPermissionForAliases(new String[]{"sms"}, call, "onSmsPerms");
+            return;
+        }
+        doSendSms(call);
+    }
+
+    @PermissionCallback
+    private void onSmsPerms(PluginCall call) {
+        if (getPermissionState("sms") == PermissionState.GRANTED) {
+            doSendSms(call);
+        } else {
+            call.reject("sms permission denied");
+        }
+    }
+
+    private void doSendSms(PluginCall call) {
+        String number = call.getString("number", "");
+        String text = call.getString("text", "");
+        try {
+            android.telephony.SmsManager sms = android.telephony.SmsManager.getDefault();
+            java.util.ArrayList<String> parts = sms.divideMessage(text);
+            sms.sendMultipartTextMessage(number, null, parts, null, null);
+            JSObject ret = new JSObject();
+            ret.put("sent", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("sms failed: " + e.getMessage());
+        }
+    }
+
+    // Байты фото контакта (миниатюра из провайдера) в base64.
+    // Нужны, когда WebView не открывает content:// напрямую: мост всегда может.
+    @PluginMethod
+    public void getContactPhoto(PluginCall call) {
+        String contactId = call.getString("contactId", "");
+        long id;
+        try {
+            id = Long.parseLong(contactId);
+        } catch (Exception e) {
+            call.reject("bad contactId");
+            return;
+        }
+        if (getPermissionState("contacts") != PermissionState.GRANTED) {
+            requestPermissionForAliases(new String[]{"contacts"}, call, "onPhotoPerms");
+            return;
+        }
+        resolvePhoto(call, id);
+    }
+
+    @PermissionCallback
+    private void onPhotoPerms(PluginCall call) {
+        if (getPermissionState("contacts") == PermissionState.GRANTED) {
+            try {
+                resolvePhoto(call, Long.parseLong(call.getString("contactId", "")));
+            } catch (Exception e) {
+                call.reject("bad contactId");
+            }
+        } else {
+            call.reject("contacts permission denied");
+        }
+    }
+
+    private void resolvePhoto(PluginCall call, long id) {
+        android.net.Uri uri = android.content.ContentUris.withAppendedId(
+            ContactsContract.Contacts.CONTENT_URI, id);
+        String photoUri = null;
+        android.database.Cursor c = null;
+        try {
+            c = getContext().getContentResolver().query(
+                uri, new String[]{ ContactsContract.Contacts.PHOTO_URI }, null, null, null);
+            if (c != null && c.moveToFirst()) photoUri = c.getString(0);
+        } catch (Exception e) {
+            call.reject("photo query failed: " + e.getMessage());
+            return;
+        } finally {
+            if (c != null) c.close();
+        }
+        if (photoUri == null) {
+            call.reject("no photo");
+            return;
+        }
+        try (java.io.InputStream in = getContext().getContentResolver().openInputStream(
+                android.net.Uri.parse(photoUri))) {
+            if (in == null) {
+                call.reject("no photo");
+                return;
+            }
+            java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+            byte[] chunk = new byte[8192];
+            int n;
+            while ((n = in.read(chunk)) != -1) buf.write(chunk, 0, n);
+            String b64 = android.util.Base64.encodeToString(buf.toByteArray(), android.util.Base64.NO_WRAP);
+            JSObject ret = new JSObject();
+            ret.put("photo", b64);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("photo read failed: " + e.getMessage());
+        }
     }
 
     @PluginMethod

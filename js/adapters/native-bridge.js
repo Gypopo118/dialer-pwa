@@ -129,6 +129,26 @@ export const nativeBridge = {
     }
   },
 
+  async sendSms({ number = '', text = '' } = {}) {
+    const p = getPlugin();
+    if (!p) return null;
+    try {
+      return await p.sendSms({ number, text });
+    } catch (_) {
+      return null;
+    }
+  },
+
+  async getContactPhoto({ contactId = '' } = {}) {
+    const p = getPlugin();
+    if (!p) return null;
+    try {
+      return await p.getContactPhoto({ contactId: String(contactId) });
+    } catch (_) {
+      return null;
+    }
+  },
+
   async openContactEditor({ name = '', number = '' } = {}) {
     const p = getPlugin();
     if (!p) return null;

@@ -36,6 +36,7 @@ let state = {
   direction: null, // 'outgoing' | 'incoming'
   number: null,
   contactName: null,
+  contactId: null,
   photoUrl: null,
   speakerOn: false,
   micMuted: false,
@@ -140,6 +141,7 @@ async function handleNativeEvent(e) {
   const base = {
     number,
     contactName: contact ? contact.name : null,
+    contactId: contact ? contact.id : null,
     photoUrl: contact && contact.photoUrl ? contact.photoUrl : null,
     speakerOn: state.speakerOn,
     micMuted: state.micMuted,
@@ -202,6 +204,7 @@ export const telephonyAdapter = {
         direction: 'outgoing',
         number,
         contactName: contact?.name || null,
+        contactId: contact?.id || null,
         photoUrl: contact?.photoUrl || null,
         speakerOn: false,
         micMuted: false,
@@ -282,6 +285,35 @@ export const telephonyAdapter = {
     this._reset();
   },
 
+  // SMS-отбой входящего: сбрасываем звонок и моментально шлём текст
+  // звонящему номеру (две кнопки-реплики на экране приёма).
+  async declineWithMessage(text) {
+    const number = state.number;
+    if (isNative()) {
+      try {
+        await nativeBridge.hangUpCall();
+      } catch (e) {
+        console.warn('[telephony] sms-decline hangUp failed:', e);
+        try {
+          callLogAdapter.refreshFromSystem();
+        } catch (_) { /* noop */ }
+        telephonyAdapter._reset();
+      }
+      if (number && text) {
+        try {
+          await nativeBridge.sendSms({ number, text });
+        } catch (e) {
+          console.warn('[telephony] sms send failed:', e);
+        }
+      }
+      armEndWatchdog();
+      return;
+    }
+    if (state.status !== 'incoming-ringing') return;
+    await callLogAdapter.appendEntry({ number: state.number, type: 'missed', durationSec: 0 });
+    this._reset();
+  },
+
   async hangUp() {
     if (isNative()) {
       try {
@@ -345,7 +377,7 @@ export const telephonyAdapter = {
       endWatchdog = null;
     }
     setState({
-      status: 'idle', direction: null, number: null, contactName: null,
+      status: 'idle', direction: null, number: null, contactName: null, contactId: null,
       photoUrl: null, speakerOn: false, micMuted: false, startedAt: null,
     });
   },

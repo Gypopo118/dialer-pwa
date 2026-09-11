@@ -417,6 +417,7 @@ export function initHomeScreen({ contextMenu }) {
     const avatarContent = avatarHtml({
       name: isKnown ? row.contact.name : null,
       photoUrl: isKnown ? row.contact.photoUrl : null,
+      contactId: isKnown ? row.contact.id : null,
       fallbackHtml: icons.person,
     });
 
