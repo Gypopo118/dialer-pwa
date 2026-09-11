@@ -174,6 +174,8 @@ public class DialerTelecomPlugin extends Plugin {
             }
             Uri uri = Uri.fromParts("tel", number, null);
             tm.placeCall(uri, new Bundle());
+            // Датчик сразу: не ждём DIALING/ACTIVE от Telecom.
+            DialerInCallService.noteCallStarted();
             JSObject ret = new JSObject();
             ret.put("placed", true);
             call.resolve(ret);

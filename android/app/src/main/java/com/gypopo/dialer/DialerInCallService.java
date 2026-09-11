@@ -100,6 +100,8 @@ public class DialerInCallService extends InCallService {
         } else if (state == Call.STATE_DIALING || state == Call.STATE_CONNECTING) {
             event = "dialing";
             cancelNotification(NOTIF_INCOMING);
+            // Датчик и здесь: исходящий могут ответить раньше, чем придёт ACTIVE.
+            acquireProximity();
         } else if (state == Call.STATE_ACTIVE) {
             event = "active";
             cancelNotification(NOTIF_INCOMING);
@@ -178,6 +180,8 @@ public class DialerInCallService extends InCallService {
         Call c = ringingCall();
         if (c == null) return false;
         try {
+            // Датчик сразу, не дожидаясь ACTIVE: ухо уже может быть у телефона.
+            noteCallStarted();
             c.answer(VideoProfile.STATE_AUDIO_ONLY);
             return true;
         } catch (Exception e) {
@@ -352,6 +356,15 @@ public class DialerInCallService extends InCallService {
     }
 
     // ---------- Датчик приближения: экран гаснет у уха ----------
+
+    // Входная точка, не зависящая от таймингов Telecom-событий: вызывается
+    // из placeCall/answer напрямую и из всех веток emitState.
+    static void noteCallStarted() {
+        try {
+            if (instance != null) instance.acquireProximity();
+        } catch (Exception ignored) {
+        }
+    }
 
     private void acquireProximity() {
         try {
