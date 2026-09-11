@@ -140,10 +140,14 @@ window.addEventListener('dialer:add-contact-blank', (e) => {
           console.warn('[dialer] full-screen notifications disabled: allow in app settings');
         }
       } catch (_) { /* noop */ }
-      // Поверх окон: дубль к FSI для пробуждения. Открывает системные
-      // настройки один раз, дальше система помнит выбор.
+      // Поверх окон: дубль к FSI для пробуждения. Спрашиваем один раз —
+      // дальше система помнит выбор, не надоедаем при каждом запуске.
       try {
-        await nativeBridge.ensureOverlayPermission();
+        const OV_FLAG = 'dialer.overlayAsked';
+        if (!localStorage.getItem(OV_FLAG)) {
+          localStorage.setItem(OV_FLAG, '1');
+          await nativeBridge.ensureOverlayPermission();
+        }
       } catch (_) { /* noop */ }
       // Просим роль при каждом запуске, пока не назначены: без неё
       // Android не отдаёт звонки нашему InCallService и показывает чужой UI.

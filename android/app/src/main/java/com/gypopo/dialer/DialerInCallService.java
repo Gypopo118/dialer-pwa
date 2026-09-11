@@ -76,8 +76,12 @@ public class DialerInCallService extends InCallService {
     public void onCallRemoved(Call call) {
         super.onCallRemoved(call);
         calls.remove(call);
-        cancelNotifications();
-        releaseProximity();
+        // Уведомления и датчик трогаем, только если живых звонков не осталось
+        // (второй входящий / удержание / конференция иначе потеряют их).
+        if (firstLiveCall() == null) {
+            cancelNotifications();
+            releaseProximity();
+        }
         JSObject data = new JSObject();
         data.put("event", "disconnected");
         data.put("number", numberOf(call));
@@ -103,8 +107,10 @@ public class DialerInCallService extends InCallService {
             acquireProximity();
         } else if (state == Call.STATE_DISCONNECTED || state == Call.STATE_DISCONNECTING) {
             event = "disconnected";
-            cancelNotifications();
-            releaseProximity();
+            if (firstLiveCall() == null) {
+                cancelNotifications();
+                releaseProximity();
+            }
         } else {
             event = "other";
         }
@@ -207,8 +213,14 @@ public class DialerInCallService extends InCallService {
         Call c = firstLiveCall();
         if (c == null || c.getState() != Call.STATE_ACTIVE) return false;
         try {
+            // Тон держим ~250мс: мгновенный play+stop часть IVR не слышит.
             c.playDtmfTone(tone);
-            c.stopDtmfTone();
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                try {
+                    c.stopDtmfTone();
+                } catch (Exception ignored) {
+                }
+            }, 250);
             return true;
         } catch (Exception e) {
             return false;

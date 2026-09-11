@@ -162,7 +162,8 @@ async function handleNativeEvent(e) {
   } else if (e.event === 'dialing') {
     setState({ ...base, status: 'outgoing-ringing', direction: 'outgoing', startedAt: null });
   } else if (e.event === 'active') {
-    setState({ ...base, status: 'active', direction: state.direction || 'outgoing', startedAt: Date.now() });
+    // startedAt не затираем: повторное событие не должно ронять таймер.
+    setState({ ...base, status: 'active', direction: state.direction || 'outgoing', startedAt: state.startedAt || Date.now() });
   } else if (e.event === 'disconnected' || e.event === 'silenced') {
     // Запись уже в системном CallLog — обновляем список и гасим экран звонка.
     // Плюс дотяжки: провайдер может дописать строку позже нашего опроса.
@@ -192,6 +193,7 @@ export const telephonyAdapter = {
         await nativeBridge.placeCall(number);
       } catch (err) {
         console.warn('[telephony] placeCall failed:', err);
+        return; // Экран не показываем: вызов не создан, висеть нечему.
       }
       // Состояние уточнится событием 'dialing' из InCallService;
       // оптимистично сразу показываем экран набора.

@@ -43,10 +43,12 @@ import com.getcapacitor.annotation.PermissionCallback;
         @Permission(strings = { Manifest.permission.READ_CALL_LOG, Manifest.permission.WRITE_CALL_LOG }, alias = "callLog"),
         @Permission(strings = {
             Manifest.permission.CALL_PHONE,
-            Manifest.permission.READ_PHONE_STATE,
-            Manifest.permission.ANSWER_PHONE_CALLS,
-            Manifest.permission.RECORD_AUDIO
+            Manifest.permission.READ_PHONE_STATE
         }, alias = "phone"),
+        @Permission(strings = { Manifest.permission.ANSWER_PHONE_CALLS }, alias = "answer"),
+        // Микрофон для самого звонка не нужен (управление идёт через
+        // InCallService); алиас оставлен под будущие аудио-функции.
+        @Permission(strings = { Manifest.permission.RECORD_AUDIO }, alias = "mic"),
         @Permission(strings = { Manifest.permission.POST_NOTIFICATIONS }, alias = "notifications")
     }
 )
@@ -186,6 +188,23 @@ public class DialerTelecomPlugin extends Plugin {
 
     @PluginMethod
     public void answerCall(PluginCall call) {
+        if (getPermissionState("answer") != PermissionState.GRANTED) {
+            requestPermissionForAliases(new String[]{"answer"}, call, "onAnswerPerms");
+            return;
+        }
+        doAnswer(call);
+    }
+
+    @PermissionCallback
+    private void onAnswerPerms(PluginCall call) {
+        if (getPermissionState("answer") == PermissionState.GRANTED) {
+            doAnswer(call);
+        } else {
+            call.reject("answer permission denied");
+        }
+    }
+
+    private void doAnswer(PluginCall call) {
         if (DialerInCallService.answer()) {
             JSObject ret = new JSObject();
             ret.put("ok", true);
