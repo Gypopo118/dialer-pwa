@@ -410,12 +410,17 @@ export function initHomeScreen({ contextMenu }) {
 
   function rowTemplate(row) {
     const isKnown = !!row.contact;
-    const arrow = row.lastType === 'outgoing' ? icons.arrowOut : row.lastType === 'incoming' ? icons.arrowIn : icons.arrowMissed;
-    const colorClass = `call-arrow--${row.lastType === 'missed' ? 'missed' : row.lastType === 'incoming' ? 'in' : 'out'}`;
-    const primaryText = isKnown ? row.contact.name : formatPhoneForDisplay(row.number);
-    const secondaryText = isKnown ? formatPhoneForDisplay(row.number) : null;
+    const isFailedOut = row.lastType === 'outgoing' && !(row.lastDurationSec > 0);
+    const arrow = (row.lastType === 'incoming' || row.lastType === 'missed') ? icons.arrowIn : icons.arrowOut;
+    const colorClass = `call-arrow--${row.lastType === 'missed' ? 'missed' : row.lastType === 'incoming' ? 'in' : (isFailedOut ? 'failed' : 'out')}`;
+    const numberText = formatPhoneForDisplay(row.number);
+    const primaryText = row.contact && row.contact.nameResolved !== false
+      ? row.contact.name
+      : (row.lastCachedName || numberText);
+    const titleIsNumber = primaryText === numberText;
+    const secondaryText = titleIsNumber ? null : numberText;
     const avatarContent = avatarHtml({
-      name: isKnown ? row.contact.name : null,
+      name: titleIsNumber ? null : primaryText,
       photoUrl: isKnown ? row.contact.photoUrl : null,
       contactId: isKnown ? row.contact.id : null,
       fallbackHtml: icons.person,

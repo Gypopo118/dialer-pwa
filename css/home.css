@@ -160,6 +160,7 @@
 .call-arrow--out { color: var(--call-outgoing); }
 .call-arrow--in { color: var(--call-incoming); }
 .call-arrow--missed { color: var(--call-missed); }
+.call-arrow--failed { color: var(--call-failed); }
 
 .recent-meta {
   flex-shrink: 0;

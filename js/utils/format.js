@@ -59,6 +59,20 @@ export function normalizeNumber(number) {
   return number.replace(/[^\d+]/g, '');
 }
 
+// Ключ группировки строк истории: хвост из 8 цифр — один собеседник,
+// тем же правилом, что и numbersEqual. Короткие сервисные номера
+// (112 и т.п.) не схлопываются.
+export function groupKeyForNumber(number) {
+  const d = String(number || '').replace(/\D/g, '');
+  return d.length >= 8 ? d.slice(-8) : d;
+}
+
+// Маскирование номера для диагностических логов: полный номер (PII) не пишем.
+export function maskNumber(n) {
+  const d = String(n || '').replace(/\D/g, '');
+  return d.length <= 4 ? '•••' : '•••' + d.slice(-4);
+}
+
 // Сравнение номеров по хвосту цифр: оператор шлёт то в локальном формате
 // (0533...), то в международном (+373...), а в контактах лежит один вариант.
 export function numbersEqual(a, b, tail = 8) {

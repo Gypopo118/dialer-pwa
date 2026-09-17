@@ -54,6 +54,7 @@ export const callLogAdapter = {
         type: e.type,
         durationSec: e.durationSec || 0,
         timestamp: new Date(e.timestamp),
+        cachedName: e.cachedName || null,
       }));
     }
     return [...entries].sort((a, b) => b.timestamp - a.timestamp);

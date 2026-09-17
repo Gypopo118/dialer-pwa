@@ -19,7 +19,7 @@
 
 import { mockContacts } from '../mock-data.js';
 import { nativeBridge } from './native-bridge.js';
-import { normalizeNumber, normalizeText, numbersEqual } from '../utils/format.js';
+import { maskNumber, normalizeNumber, normalizeText, numbersEqual } from '../utils/format.js';
 
 const STORAGE_KEY = 'dialer.contacts.v1';
 
@@ -64,9 +64,13 @@ let contacts = loadStore();
 // Сбрасывается при resume и после правок в системном редакторе.
 let sysKnown = false;
 let sysCache = null;
+// TTL кэша провайдера: свежий Google-синк подхватывается в пределах минуты
+// даже без resume/правок, при этом частый набор не перечитывает контакты.
+const SYS_CACHE_TTL_MS = 60_000;
+let sysAt = 0;
 
 async function systemContacts() {
-  if (sysKnown) return sysCache;
+  if (sysKnown && Date.now() - sysAt < SYS_CACHE_TTL_MS) return sysCache;
   sysKnown = true;
   let list = null;
   try {
@@ -76,6 +80,7 @@ async function systemContacts() {
     list = null;
   }
   sysCache = list;
+  sysAt = Date.now();
   return sysCache;
 }
 
@@ -92,19 +97,22 @@ export const contactsAdapter = {
         const key = c.id || ('noid:' + c.number);
         let entry = byId.get(key);
         if (!entry) {
-          entry = { id: c.id, name: null, numbers: [], photoUrl: null };
+          entry = { id: c.id, name: null, numbers: [], photoUrl: null, lookupKey: null };
           byId.set(key, entry);
         }
         if (!entry.numbers.includes(c.number)) entry.numbers.push(c.number);
         if (c.name && !entry.name) entry.name = c.name;
         if (!entry.photoUrl && c.photoUri) entry.photoUrl = c.photoUri;
+        if (!entry.lookupKey && c.lookupKey) entry.lookupKey = c.lookupKey;
       }
       const sysList = [...byId.values()].map((e) => ({
         id: e.id || ('device-noid-' + e.numbers[0]),
+        nameResolved: !!e.name,
         name: e.name || e.numbers[0],
         numbers: e.numbers,
         photoUrl: e.photoUrl,
         source: 'device',
+        ...(e.lookupKey ? { lookupKey: e.lookupKey } : {}),
       }));
       // Плюс локальные контакты приложения, которых нет в системе.
       const sysNums = new Set();
@@ -122,11 +130,30 @@ export const contactsAdapter = {
   async refreshCache() {
     sysKnown = false;
     sysCache = null;
+    sysAt = 0;
   },
 
   async findByNumber(number) {
+    const digits = String(number || '').replace(/\D/g, '');
+    const hit = await nativeBridge.lookupContactByNumber({ number });
+    if (hit?.contact) {
+      if (localStorage.getItem('dialer.debugLookup') === '1') {
+        console.info('[lookup]', maskNumber(number), 'len=' + digits.length, 'via=phonelookup');
+      }
+      return {
+        id: hit.contact.id,
+        name: hit.contact.name,
+        numbers: [number],
+        photoUrl: hit.contact.photoUri || null,
+        source: 'device',
+      };
+    }
     const all = await this.getAll();
-    return all.find((c) => (c.numbers || []).some((n) => numbersEqual(n, number))) || null;
+    const found = all.find((c) => (c.numbers || []).some((n) => numbersEqual(n, number))) || null;
+    if (localStorage.getItem('dialer.debugLookup') === '1') {
+      console.info('[lookup]', maskNumber(number), 'len=' + digits.length, 'via=' + (found ? 'tail' : 'miss'));
+    }
+    return found;
   },
 
   async search(query) {

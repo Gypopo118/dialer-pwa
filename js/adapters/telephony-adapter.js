@@ -169,6 +169,10 @@ async function handleNativeEvent(e) {
   } else if (e.event === 'disconnected' || e.event === 'silenced') {
     // Запись уже в системном CallLog — обновляем список и гасим экран звонка.
     // Плюс дотяжки: провайдер может дописать строку позже нашего опроса.
+    // Контакты сбрасываем здесь же: Google-синк мог приземлиться за сессию.
+    try {
+      contactsAdapter.refreshCache();
+    } catch (_) { /* noop */ }
     try {
       callLogAdapter.refreshFromSystem();
     } catch (_) { /* noop */ }

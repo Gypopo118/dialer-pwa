@@ -17,7 +17,7 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
   let current = null; // { number, contact }
 
   async function open(row) {
-    current = { number: row.number, contact: row.contact };
+    current = { number: row.number, contact: row.contact, lastCachedName: row.lastCachedName || null };
     screen.hidden = false;
     screen.classList.add('screen--enter-right');
     requestAnimationFrame(() => screen.classList.remove('screen--enter-right'));
@@ -34,9 +34,13 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
   }
 
   async function render() {
-    const { number, contact } = current;
+    const { number, contact, lastCachedName } = current;
     const entries = await callLogAdapter.getEntriesForNumber(number);
     const isKnown = !!contact;
+    const numberText = formatPhoneForDisplay(number);
+    const hasName = !!(contact && contact.nameResolved !== false);
+    const displayTitle = hasName ? contact.name : (lastCachedName || numberText);
+    const titleIsNumber = displayTitle === numberText;
     const blocked = blockedStore.isBlocked(number);
     // В APK правка идёт через системный редактор Google (пункт «Изменить»),
     // поэтому inline-правка в карточке отключена — иначе правился бы
@@ -55,9 +59,9 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
           <div class="contact-header__top">
             <button class="icon-btn" data-action="back">${icons.chevronLeft}</button>
           </div>
-          <div class="contact-header__avatar">${avatarHtml({ name: isKnown ? contact.name : null, photoUrl: isKnown ? contact.photoUrl : null, contactId: isKnown ? contact.id : null, fallbackHtml: icons.person })}</div>
-          <div class="contact-header__name" data-field="name" ${inlineEditable ? 'contenteditable="true"' : ''}>${isKnown ? contact.name : formatPhoneForDisplay(number)}</div>
-          ${isKnown ? `<div class="contact-header__number" data-field="number" ${inlineEditable ? 'contenteditable="true"' : ''}>${formatPhoneForDisplay(number)}</div>` : ''}
+          <div class="contact-header__avatar">${avatarHtml({ name: titleIsNumber ? null : displayTitle, photoUrl: isKnown ? contact.photoUrl : null, contactId: isKnown ? contact.id : null, fallbackHtml: icons.person })}</div>
+          <div class="contact-header__name" data-field="name" ${inlineEditable ? 'contenteditable="true"' : ''}>${displayTitle}</div>
+          ${!titleIsNumber ? `<div class="contact-header__number" data-field="number" ${inlineEditable ? 'contenteditable="true"' : ''}>${numberText}</div>` : ''}
           <div class="contact-header__actions">
             <button class="contact-action" data-action="call">
               <span class="circle circle--call">${icons.phone}</span>
@@ -132,8 +136,9 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
         html += `<div class="history-day-label">${dayLabel}</div>`;
         lastDay = dayLabel;
       }
-      const arrow = e.type === 'outgoing' ? icons.arrowOut : e.type === 'incoming' ? icons.arrowIn : icons.arrowMissed;
-      const colorClass = `call-arrow--${e.type === 'missed' ? 'missed' : e.type === 'incoming' ? 'in' : 'out'}`;
+      const isFailedOut = e.type === 'outgoing' && !(e.durationSec > 0);
+      const arrow = (e.type === 'incoming' || e.type === 'missed') ? icons.arrowIn : icons.arrowOut;
+      const colorClass = `call-arrow--${e.type === 'missed' ? 'missed' : e.type === 'incoming' ? 'in' : (isFailedOut ? 'failed' : 'out')}`;
       const typeLabel = { outgoing: 'Исходящий', incoming: 'Входящий', missed: 'Пропущенный' }[e.type];
       html += `
         <div class="history-item">

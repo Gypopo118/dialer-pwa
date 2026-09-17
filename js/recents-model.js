@@ -1,6 +1,6 @@
 import { callLogAdapter } from './adapters/call-log-adapter.js';
 import { contactsAdapter } from './adapters/contacts-adapter.js';
-import { normalizeNumber, normalizeText } from './utils/format.js';
+import { groupKeyForNumber, maskNumber, numbersEqual, normalizeText } from './utils/format.js';
 
 // Возвращает по одной строке на номер (сгруппировано), отсортировано по
 // времени последнего звонка. Каждая строка несёт: имя/номер контакта,
@@ -13,7 +13,7 @@ export async function buildRecentsList() {
 
   const groups = new Map();
   for (const entry of entries) {
-    const key = normalizeNumber(entry.number);
+    const key = groupKeyForNumber(entry.number);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(entry);
   }
@@ -23,12 +23,19 @@ export async function buildRecentsList() {
     list.sort((a, b) => b.timestamp - a.timestamp);
     const last = list[0];
     const contact = contacts.find((c) =>
-      c.numbers.some((n) => normalizeNumber(n) === key)
+      (c.numbers || []).some((n) => numbersEqual(n, last.number))
     );
+    const lastCachedName = last.cachedName || null;
+    if (localStorage.getItem('dialer.debugLookup') === '1') {
+      const digits = String(last.number || '').replace(/\D/g, '');
+      const path = contact ? 'tail' : (lastCachedName ? 'cached' : 'miss');
+      console.info('[lookup]', maskNumber(last.number), 'len=' + digits.length, 'via=' + path);
+    }
     rows.push({
       key,
       number: entry_number(list),
       contact: contact || null,
+      lastCachedName,
       count: list.length,
       lastType: last.type,
       lastTimestamp: last.timestamp,

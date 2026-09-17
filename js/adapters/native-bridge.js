@@ -179,6 +179,16 @@ export const nativeBridge = {
     }
   },
 
+  async lookupContactByNumber({ number = '' } = {}) {
+    const p = getPlugin();
+    if (!p) return null;
+    try {
+      return await p.lookupContactByNumber({ number: String(number) });
+    } catch (_) {
+      return null;
+    }
+  },
+
   async getCallLog(limit = 200) {
     const p = getPlugin();
     if (!p) return null;

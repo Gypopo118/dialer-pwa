@@ -19,6 +19,7 @@
   --call-outgoing: #34C77B;
   --call-incoming: #3D8BFD;
   --call-missed: #FF5B54;
+  --call-failed: #FF9F0A;
 
   --accent-call: #2FCE5C;
   --accent-call-pressed: #26A94B;

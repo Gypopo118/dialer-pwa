@@ -54,8 +54,10 @@ async function openEditContact(row) {
   try {
     if (contact && await nativeBridge.isAvailable()) {
       const m = /^device-(\d+)$/.exec(contact.id || '');
-      if (m) {
-        await nativeBridge.openContactEditorForEdit({ contactId: m[1] });
+      const contactId = m ? m[1] : '';
+      const lookupKey = contact.lookupKey || '';
+      if (contactId || lookupKey) {
+        await nativeBridge.openContactEditorForEdit({ contactId, lookupKey });
         await contactsAdapter.refreshCache();
         home.refreshRecents();
         contactHistoryScreen.refresh();

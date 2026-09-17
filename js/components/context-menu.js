@@ -20,7 +20,7 @@ export function initContextMenu({ onOpenHistory, onOpenAddContact, onOpenEditCon
 
   function open(row) {
     currentRow = row;
-    const isKnown = !!row.contact;
+    const isKnown = !!row.contact && row.contact.nameResolved !== false;
     const blocked = blockedStore.isBlocked(row.number);
     sheet.innerHTML = `
       <div class="context-sheet__handle"></div>

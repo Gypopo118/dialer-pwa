@@ -284,19 +284,29 @@ public class DialerTelecomPlugin extends Plugin {
 
     // Правка существующего контакта в системном редакторе (тот же Google).
     // contactId — числовой ContactsContract.Contacts._ID (JS передаёт число
-    // из id вида "device-<id>").
+    // из id вида "device-<id>"). lookupKey — опциональный, имеет приоритет:
+    // переживает слияние/переиндексацию контакта.
     @PluginMethod
     public void openContactEditorForEdit(PluginCall call) {
         String contactId = call.getString("contactId", "");
-        long id;
+        String lookupKey = call.getString("lookupKey", "");
+        long id = 0;
+        boolean hasId = false;
         try {
             id = Long.parseLong(contactId);
-        } catch (Exception e) {
-            call.reject("bad contactId");
-            return;
+            hasId = true;
+        } catch (Exception ignored) {
         }
         try {
-            Uri uri = ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI, id);
+            Uri uri;
+            if (lookupKey != null && !lookupKey.isEmpty()) {
+                uri = ContactsContract.Contacts.getLookupUri(id, lookupKey);
+            } else if (hasId) {
+                uri = ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI, id);
+            } else {
+                call.reject("bad contactId");
+                return;
+            }
             Intent intent = new Intent(Intent.ACTION_EDIT, uri);
             startActivityForResult(call, intent, "onContactEditorFinished");
         } catch (Exception e) {
@@ -548,7 +558,8 @@ public class DialerTelecomPlugin extends Plugin {
             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
             ContactsContract.CommonDataKinds.Phone.NUMBER,
             ContactsContract.CommonDataKinds.Phone.PHOTO_URI,
-            ContactsContract.CommonDataKinds.Phone.CONTACT_ID
+            ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
+            ContactsContract.CommonDataKinds.Phone.NORMALIZED_NUMBER
         };
         try (Cursor c = getContext().getContentResolver().query(
                 ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
@@ -561,6 +572,7 @@ public class DialerTelecomPlugin extends Plugin {
                     o.put("number", c.getString(1));
                     o.put("photoUri", c.isNull(2) ? null : c.getString(2));
                     o.put("id", "device-" + c.getLong(3));
+                    o.put("normalizedNumber", c.isNull(4) ? null : c.getString(4));
                     arr.put(o);
                 }
             }
@@ -571,6 +583,43 @@ public class DialerTelecomPlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("contacts", arr);
         call.resolve(ret);
+    }
+
+    // Резолв «номер → контакт» тем же механизмом, что у системной звонилки:
+    // PhoneLookup.CONTENT_FILTER_URI формат-независим (любое написание номера
+    // даёт один контакт). Пустой cursor → {contact:null}; без разрешения —
+    // reject (JS ловит и уходит в fallback, наружу не пробрасывается).
+    @PluginMethod
+    public void lookupContactByNumber(PluginCall call) {
+        String number = call.getString("number", "");
+        if (getPermissionState("contacts") != PermissionState.GRANTED) {
+            call.reject("contacts permission denied");
+            return;
+        }
+        Uri uri = Uri.withAppendedPath(
+            ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number));
+        String[] proj = {
+            ContactsContract.PhoneLookup.DISPLAY_NAME,
+            ContactsContract.PhoneLookup.CONTACT_ID,
+            ContactsContract.PhoneLookup.LOOKUP_KEY,
+            ContactsContract.PhoneLookup.PHOTO_URI,
+            ContactsContract.PhoneLookup.NUMBER
+        };
+        JSObject contact = null;
+        try (Cursor c = getContext().getContentResolver().query(uri, proj, null, null, null)) {
+            if (c != null && c.moveToFirst()) {
+                contact = new JSObject();
+                contact.put("name", c.isNull(0) ? null : c.getString(0));
+                contact.put("id", "device-" + c.getLong(1));
+                contact.put("lookupKey", c.isNull(2) ? null : c.getString(2));
+                contact.put("photoUri", c.isNull(3) ? null : c.getString(3));
+                contact.put("number", c.isNull(4) ? null : c.getString(4));
+            }
+        } catch (Exception e) {
+            call.reject("contact lookup failed: " + e.getMessage());
+            return;
+        }
+        call.resolve(new JSObject().put("contact", contact));
     }
 
     // ---------- call log (системный CallLog.Calls) ----------
@@ -601,7 +650,8 @@ public class DialerTelecomPlugin extends Plugin {
             CallLog.Calls.NUMBER,
             CallLog.Calls.TYPE,
             CallLog.Calls.DATE,
-            CallLog.Calls.DURATION
+            CallLog.Calls.DURATION,
+            CallLog.Calls.CACHED_NAME
         };
         try (Cursor c = getContext().getContentResolver().query(
                 CallLog.Calls.CONTENT_URI,
@@ -617,6 +667,7 @@ public class DialerTelecomPlugin extends Plugin {
                     o.put("type", mapCallType(c.getInt(2)));
                     o.put("timestamp", c.getLong(3));
                     o.put("durationSec", c.getInt(4));
+                    o.put("cachedName", c.isNull(5) ? null : c.getString(5));
                     arr.put(o);
                 }
             }
