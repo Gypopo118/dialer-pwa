@@ -23,7 +23,12 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
+      # v4: больше не просит удалённый Google пакет 'tools' (v3 падал
+      # 'Failed to find package tools'). Пакеты ниже — ровно то, что нужно
+      # для compileSdk 36 + дефолтных build-tools всех AGP 8.x.
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 build-tools;35.0.0 build-tools;34.0.0'
 
       - name: Validate PWA shell
         run: |
