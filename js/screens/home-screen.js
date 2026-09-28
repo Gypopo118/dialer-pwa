@@ -101,12 +101,14 @@ export function initHomeScreen({ contextMenu }) {
   function syncDialInput(value) {
     if (dialInput.value === value) return;
     dialInput.value = value;
+    updateFakeCaret();
   }
   function placeCaret(pos) {
     const p = Math.max(0, Math.min(pos, dialInput.value.length));
     lastCaret = { start: p, end: p };
     dialInput.focus({ preventScroll: true });
     try { dialInput.setSelectionRange(p, p); } catch (_) { /* noop */ }
+    updateFakeCaret();
   }
   dialInput.addEventListener('input', () => {
     rememberCaret();
@@ -124,6 +126,28 @@ export function initHomeScreen({ contextMenu }) {
   loupe.className = 'dial-loupe';
   loupe.hidden = true;
   dialBlock.appendChild(loupe);
+  // Своя каретка: белый мигающий штрих поверх поля. Нативная в readonly
+  // WebView часто не рисуется, а фокус уводят кнопки клавиатуры.
+  const caretEl = document.createElement('div');
+  caretEl.className = 'dial-caret';
+  caretEl.hidden = true;
+  dialInput.parentElement.appendChild(caretEl);
+  function updateFakeCaret() {
+    const v = dialInput.value || '';
+    if (!v || dialBlock.classList.contains('dial-block--hidden')) {
+      caretEl.hidden = true;
+      return;
+    }
+    const { start } = effectiveCaret();
+    const m = loupeMetrics();
+    const rowRect = dialInput.parentElement.getBoundingClientRect();
+    const pos = Math.max(0, Math.min(start, m.len));
+    const x = m.startX + pos * m.charW - rowRect.left;
+    const fontSize = parseFloat(getComputedStyle(dialInput).fontSize) || 32;
+    caretEl.style.left = x + 'px';
+    caretEl.style.height = Math.round(fontSize * 1.05) + 'px';
+    caretEl.hidden = false;
+  }
   function escapeLoupe(s) {
     return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }

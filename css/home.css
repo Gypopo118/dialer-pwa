@@ -294,6 +294,27 @@
   border-radius: 6px;
   padding: 0 2px;
 }
+/* Своя каретка поля ввода: нативная в readonly/WebView может не рисоваться
+или гаснуть при уводе фокуса на кнопки — эта видна всегда и везде,
+позиция считается тем же механизмом, что и перетаскивание (см. home-screen.js). */
+.dial-caret {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 34px;
+  margin-left: -1px;
+  background: #FFFFFF;
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 4;
+  animation: dial-caret-blink 1.1s steps(1) infinite;
+}
+.dial-caret[hidden] { display: none; }
+@keyframes dial-caret-blink {
+  0%, 55% { opacity: 1; }
+  56%, 100% { opacity: 0; }
+}
 .backspace-btn {
   position: absolute;
   right: 0;
