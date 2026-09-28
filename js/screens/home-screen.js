@@ -545,7 +545,7 @@ export function initHomeScreen({ contextMenu }) {
           <div class="recent-sub">
             <span class="call-arrow ${colorClass}">${arrow}</span>
             ${blockedStore.isBlocked(row.number) ? `<span class="blocked-badge" title="Заблокированный контакт">${icons.block}</span>` : ''}
-            ${secondaryText ? `<span>${secondaryText}</span><span class="dot">·</span>` : ''}
+            ${secondaryText ? `<span class="recent-number">${secondaryText}</span><span class="dot">·</span>` : ''}
             <span class="clock-ico">${icons.clock}</span>
             <span class="dur">${row.lastDurationSec > 0 ? formatDuration(row.lastDurationSec) : '—'}</span>
           </div>

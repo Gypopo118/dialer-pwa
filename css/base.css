@@ -3,7 +3,8 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: var(--bg);
+  /* Матовый графит: едва заметная вариация оттенка сверху вниз, без текстур */
+  background: linear-gradient(180deg, #12131A 0%, var(--bg) 45%, #0A0B0E 100%);
   color: var(--text-primary);
   font-family: var(--font);
   -webkit-tap-highlight-color: transparent;
@@ -66,7 +67,7 @@ svg { display: block; }
   max-width: 520px;
   margin: 0 auto;
   overflow: hidden;
-  background: var(--bg);
+  background: transparent;
 }
 
 .screen {

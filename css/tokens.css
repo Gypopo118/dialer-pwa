@@ -3,18 +3,20 @@
   Палитра и пропорции зафиксированы по ТЗ — не менять без явного запроса.
 */
 :root {
-  /* Цвета */
-  --bg: #0A0A0A;
-  --bg-elevated: #131314;
-  --surface-1: #1B1B1D;      /* карточки строк истории */
-  --surface-2: #201F22;      /* базовый графит клавиш */
-  --surface-2-top: #29282C;  /* световой градиент сверху клавиши */
-  --surface-2-pressed: #17171A;
+  /* Цвета — Premium Dark: светлотная иерархия bg < карточки < клавиши */
+  --bg: #0E0F13;             /* матовый графит, самый тёмный уровень */
+  --bg-elevated: #15161C;
+  --surface-1: #20232A;      /* карточки строк истории — заметно светлее фона */
+  --surface-1-top: #272B34;  /* едва заметное высветление верха карточки */
+  --surface-1-pressed: #1A1D23;
+  --surface-2: #262931;      /* клавиши gunmetal — светлее и глубже карточек */
+  --surface-2-top: #30343E;  /* световой градиент сверху клавиши */
+  --surface-2-pressed: #1C1E24;
   --hairline: rgba(255, 255, 255, 0.06);
 
-  --text-primary: #F5F5F7;
+  --text-primary: #FFFFFF;
   --text-secondary: #9A9CA3;
-  --text-tertiary: #6C6E75;
+  --text-tertiary: #87888F;
 
   --call-outgoing: #34C77B;
   --call-incoming: #3D8BFD;
@@ -32,18 +34,18 @@
   --radius-pill: 999px;
   --radius-sheet: 24px;
 
-  /* Тени — единая система глубины */
+  /* Тени — единая система глубины: только мягкие, без неона и тяжёлого 3D */
   --shadow-key:
-    0 1px 0 rgba(255, 255, 255, 0.05) inset,
-    0 -6px 10px rgba(0, 0, 0, 0.35) inset,
-    0 8px 14px rgba(0, 0, 0, 0.45);
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 -4px 8px rgba(0, 0, 0, 0.25) inset,
+    0 6px 12px rgba(0, 0, 0, 0.35);
   --shadow-key-pressed:
     0 -2px 4px rgba(0, 0, 0, 0.5) inset,
     0 1px 0 rgba(255, 255, 255, 0.03) inset;
-  --shadow-row: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-row: 0 1px 2px rgba(0, 0, 0, 0.45), 0 4px 10px rgba(0, 0, 0, 0.25);
   --shadow-call-btn:
-    0 1px 0 rgba(255, 255, 255, 0.18) inset,
-    0 10px 22px rgba(47, 206, 92, 0.35);
+    0 1px 0 rgba(255, 255, 255, 0.14) inset,
+    0 10px 20px rgba(0, 0, 0, 0.45);
 
   /* Типографика — системный стек Android (Roboto уже на устройстве) */
   --font: "Roboto", "Segoe UI", system-ui, -apple-system, sans-serif;
