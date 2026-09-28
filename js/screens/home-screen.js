@@ -211,6 +211,12 @@ export function initHomeScreen({ contextMenu }) {
     const t = e.changedTouches[0];
     const dx = t.clientX - swipeX, dy = t.clientY - swipeY;
     swipeX = null;
+    if (Math.abs(dx) < 12 && Math.abs(dy) < 12) {
+      // Тап: поле readonly, поэтому нативный тап каретку не ставит
+      // (и системную клавиатуру не будит) — ставим вручную по координате.
+      placeCaret(caretFromX(t.clientX));
+      return;
+    }
     if (Math.abs(dx) > 24 && Math.abs(dy) < 40) {
       const steps = Math.max(-10, Math.min(10, Math.round(dx / 28)));
       placeCaret(swipeCaret + steps);
