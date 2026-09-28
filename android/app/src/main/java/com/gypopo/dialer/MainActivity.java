@@ -17,4 +17,27 @@ public class MainActivity extends BridgeActivity {
             setTurnScreenOn(true);
         }
     }
+
+    // Системная кнопка/жест «назад»: сначала закрываем слои интерфейса через
+    // историю WebView (popstate гасит экраны по одному — как стрелка «назад»
+    // в шапке), и только на корневом экране сворачиваем приложение.
+    // Отдельный хук через плагин App не используется: пакета @capacitor/app
+    // в сборке нет, поэтому его addListener молча не срабатывал и жест
+    // всегда сворачивал приложение, не закрывая «Историю»/«Контакты».
+    @Override
+    public void onBackPressed() {
+        try {
+            if (bridge != null && bridge.getWebView() != null && bridge.getWebView().canGoBack()) {
+                bridge.getWebView().goBack();
+                return;
+            }
+        } catch (Exception ignored) {
+            // Мост недоступен — падаем на сворачивание ниже.
+        }
+        try {
+            moveTaskToBack(true);
+        } catch (Exception ignored) {
+            super.onBackPressed();
+        }
+    }
 }

@@ -6,7 +6,7 @@ import { buildRecentsList, filterRecents } from '../recents-model.js';
 import { contactsAdapter } from '../adapters/contacts-adapter.js';
 import { callLogAdapter } from '../adapters/call-log-adapter.js';
 import { telephonyAdapter } from '../adapters/telephony-adapter.js';
-import { formatPhoneForDisplay, formatDuration, formatRelativeTime, normalizeNumber } from '../utils/format.js';
+import { formatPhoneForDisplay, formatDuration, formatRelativeTime, dialSearchKey, groupKeyForNumber } from '../utils/format.js';
 import { avatarHtml, warmPhotoCache, swapCachedPhotos } from '../utils/photo-cache.js';
 import { attachListScrollGesture } from '../utils/list-scroll-gesture.js';
 import { pushLayer, popLayerSilently, registerOverlay } from '../utils/back-stack.js';
@@ -66,10 +66,11 @@ export function initHomeScreen({ contextMenu }) {
     dialInput.classList.toggle('dial-input--empty', !state.dialInput);
     backspaceBtn.hidden = !state.dialInput;
     callBtn.toggleAttribute('disabled', !state.dialInput);
-    // Набранные цифры вживую фильтруют историю (smart dial).
+    // Набранные цифры вживую фильтруют историю (smart dial), но с длинным
+    // дебаунсом: фильтрация и подгрузка фото не должны тормозить сами цифры.
     if (state.dialInput !== lastDialFilter) {
       lastDialFilter = state.dialInput;
-      scheduleRender();
+      scheduleRender(350);
     }
   });
   dialInput.value = uiStore.get().dialInput || '';
@@ -115,13 +116,97 @@ export function initHomeScreen({ contextMenu }) {
   dialInput.addEventListener('keyup', rememberCaret);
   dialInput.addEventListener('select', rememberCaret);
   // Свайп по полю ввода двигает курсор (работает и без системной клавиатуры).
+  // Долгое нажатие + ведение пальцем — точное перетаскивание курсора с лупой:
+  // над полем всплывает увеличенный фрагмент номера вокруг каретки.
   let swipeX = null, swipeY = null, swipeCaret = 0;
+  let dragMode = false, dragTimer = null, dragStartX = 0, dragStartY = 0;
+  const loupe = document.createElement('div');
+  loupe.className = 'dial-loupe';
+  loupe.hidden = true;
+  dialBlock.appendChild(loupe);
+  function escapeLoupe(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function loupeMetrics() {
+    const rect = dialInput.getBoundingClientRect();
+    const blockRect = dialBlock.getBoundingClientRect();
+    const fontSize = parseFloat(getComputedStyle(dialInput).fontSize) || 32;
+    const charW = fontSize * 0.6 + 1; // цифра + letter-spacing
+    const len = (dialInput.value || '').length;
+    const textW = Math.min(len * charW, rect.width);
+    // Текст отцентрован: начало строки + скролл поля.
+    const startX = rect.left + (rect.width - textW) / 2 - dialInput.scrollLeft;
+    return { blockRect, charW, len, startX };
+  }
+  function caretFromX(clientX) {
+    const m = loupeMetrics();
+    if (!m.len) return 0;
+    return Math.max(0, Math.min(m.len, Math.round((clientX - m.startX) / m.charW)));
+  }
+  function showLoupe(caret) {
+    const m = loupeMetrics();
+    const v = dialInput.value || '';
+    const from = Math.max(0, caret - 4), to = Math.min(v.length, caret + 5);
+    const w = 170;
+    loupe.innerHTML = `<span>${escapeLoupe(v.slice(from, caret))}</span>`
+      + `<span class="dial-loupe__caret">${escapeLoupe(v.slice(caret, caret + 1)) || '&#8203;'}</span>`
+      + `<span>${escapeLoupe(v.slice(caret + 1, to))}</span>`;
+    loupe.hidden = false;
+    const caretX = m.startX - m.blockRect.left + caret * m.charW;
+    loupe.style.left = Math.max(8, Math.min(m.blockRect.width - w - 8, caretX - w / 2)) + 'px';
+  }
+  function hideLoupe() { loupe.hidden = true; }
+  dialInput.addEventListener('contextmenu', (e) => e.preventDefault());
   dialInput.addEventListener('touchstart', (e) => {
     const t = e.touches[0];
     swipeX = t.clientX; swipeY = t.clientY;
     swipeCaret = effectiveCaret().start;
+    dragMode = false;
+    dragStartX = t.clientX; dragStartY = t.clientY;
+    if (dragTimer) clearTimeout(dragTimer);
+    dragTimer = setTimeout(() => {
+      dragTimer = null;
+      if (swipeX === null) return;
+      // Палец стоит на месте — входим в перетаскивание курсора с лупой.
+      dragMode = true;
+      const c = caretFromX(dragStartX);
+      placeCaret(c);
+      showLoupe(c);
+    }, 450);
+  }, { passive: true });
+  dialInput.addEventListener('touchmove', (e) => {
+    if (!dragMode) {
+      // Палец ушёл до срабатывания таймера — это свайп, а не перетаскивание.
+      if (dragTimer) {
+        const t = e.touches[0];
+        if (Math.hypot(t.clientX - dragStartX, t.clientY - dragStartY) > 12) {
+          clearTimeout(dragTimer);
+          dragTimer = null;
+        }
+      }
+      return;
+    }
+    e.preventDefault(); // не даём скроллу и выделению дёргать поле
+    const c = caretFromX(e.touches[0].clientX);
+    placeCaret(c);
+    showLoupe(c);
+  }, { passive: false });
+  dialInput.addEventListener('touchcancel', () => {
+    if (dragTimer) { clearTimeout(dragTimer); dragTimer = null; }
+    dragMode = false;
+    hideLoupe();
+    swipeX = null;
   }, { passive: true });
   dialInput.addEventListener('touchend', (e) => {
+    if (dragTimer) { clearTimeout(dragTimer); dragTimer = null; }
+    if (dragMode) {
+      // Отпустили после перетаскивания: курсор уже стоит, свайп-сдвиг не нужен.
+      dragMode = false;
+      hideLoupe();
+      swipeX = null;
+      rememberCaret();
+      return;
+    }
     if (swipeX === null) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - swipeX, dy = t.clientY - swipeY;
@@ -317,36 +402,57 @@ export function initHomeScreen({ contextMenu }) {
   // Поиск и набор фильтруют список вживую:
   // - строка поиска — по именам и номерам, включая контакты без истории;
   // - набранные цифры — по истории звонков (+ совпавшие контакты ниже).
+  // Цифры в поле ложатся синхронно и никогда не ждут фильтр: строки истории
+  // красятся сразу первым проходом, а тяжёлый поиск контактов и фото
+  // доклеиваются вторым проходом и на ввод уже не влияют.
   async function renderRecents() {
     const seq = ++renderSeq;
     const { searchQuery, searchOpen, dialInput: dial } = uiStore.get();
     const q = (searchQuery || '').trim();
     const digits = (dial || '').replace(/[^\d+]/g, '');
+    const dkey = dialSearchKey(digits);
 
     let rows = allRows;
-    let matchedContacts = [];
+    let needContacts = null;
     if (searchOpen && q) {
       rows = filterRecents(allRows, q);
-      try {
-        matchedContacts = await contactsAdapter.search(q);
-      } catch (_) {
-        matchedContacts = [];
-      }
-    } else if (digits) {
-      rows = allRows.filter((row) => row.number.replace(/[^\d+]/g, '').includes(digits));
-      try {
-        const found = await contactsAdapter.search(digits);
-        const inHistory = new Set(rows.map((r) => r.key));
-        matchedContacts = found.filter((c) =>
-          (c.numbers || []).some((n) => n.replace(/[^\d+]/g, '').includes(digits))
-          && !((c.numbers || []).some((n) => inHistory.has(normalizeNumber(n))))
-        );
-      } catch (_) {
-        matchedContacts = [];
-      }
+      needContacts = q;
+    } else if (dkey) {
+      // Один и тот же номер при любом написании: «0775», «775», «+373775».
+      rows = allRows.filter((row) => dialSearchKey(row.number).includes(dkey));
+      needContacts = digits;
+    }
+    // Первый проход — мгновенно и без фото: список следует за пальцем.
+    // Фото откладываем только пока реально набираем (dkey непуст).
+    const isTyping = !searchOpen && !!dkey;
+    paintRecents(rows, [], seq, isTyping);
+    if (needContacts === null || seq !== renderSeq) return;
+    let found = [];
+    try {
+      found = await contactsAdapter.search(needContacts);
+    } catch (_) {
+      found = [];
     }
     if (seq !== renderSeq) return;
-    const hasFilter = (searchOpen && q) || digits;
+    let matchedContacts = [];
+    if (searchOpen && q) {
+      matchedContacts = found;
+    } else {
+      // Контакт уже виден в истории (даже в другом написании) — не дублируем.
+      const inHistory = new Set();
+      rows.forEach((r) => (r.entries || []).forEach((e) => inHistory.add(groupKeyForNumber(e.number))));
+      matchedContacts = found.filter((c) =>
+        (c.numbers || []).some((n) => dialSearchKey(n).includes(dkey))
+        && !((c.numbers || []).some((n) => inHistory.has(groupKeyForNumber(n))))
+      );
+    }
+    paintRecents(rows, matchedContacts, seq, isTyping);
+  }
+
+  function paintRecents(rows, matchedContacts, seq, deferPhotos) {
+    if (seq !== renderSeq) return;
+    const { searchQuery, searchOpen, dialInput: dial } = uiStore.get();
+    const hasFilter = (searchOpen && (searchQuery || '').trim()) || (dial || '').replace(/[^\d+]/g, '');
     if (!rows.length && !matchedContacts.length) {
       lastRecentsHtml = '';
       recentsEl.innerHTML = `<div class="recents-empty">${hasFilter ? 'Ничего не найдено' : 'Пока нет истории звонков'}</div>`;
@@ -364,7 +470,9 @@ export function initHomeScreen({ contextMenu }) {
     recentsEl.scrollTop = keepScroll;
     bindHistoryRows(rows);
     bindContactRows(matchedContacts);
-    afterRenderPhotos(rows, matchedContacts);
+    // Фото греем только вне набора: прогрев кэша и подмена картинок
+    // на каждый тап давали тот самый лаг первых цифр.
+    if (!deferPhotos) afterRenderPhotos(rows, matchedContacts);
   }
 
   function bindHistoryRows(rows) {

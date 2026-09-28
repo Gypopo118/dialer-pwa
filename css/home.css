@@ -264,6 +264,34 @@
   -webkit-user-select: text;
 }
 .dial-input::placeholder { color: var(--text-tertiary); font-size: 20px; }
+/* Лупа перетаскивания курсора: увеличенный фрагмент вокруг каретки,
+показывается только пока палец ведёт курсор (см. home-screen.js). */
+.dial-loupe {
+  position: absolute;
+  left: 8px;
+  bottom: calc(100% + 8px);
+  width: 170px;
+  padding: 8px 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  font-size: 30px;
+  letter-spacing: 1px;
+  text-align: center;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 5;
+}
+.dial-loupe[hidden] { display: none; }
+.dial-loupe__caret {
+  background: var(--accent-call);
+  color: #06130b;
+  border-radius: 6px;
+  padding: 0 2px;
+}
 .backspace-btn {
   position: absolute;
   right: 0;

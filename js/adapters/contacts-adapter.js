@@ -19,7 +19,7 @@
 
 import { mockContacts } from '../mock-data.js';
 import { nativeBridge } from './native-bridge.js';
-import { maskNumber, normalizeNumber, normalizeText, numbersEqual } from '../utils/format.js';
+import { dialSearchKey, maskNumber, normalizeNumber, normalizeText, numbersEqual } from '../utils/format.js';
 
 const STORAGE_KEY = 'dialer.contacts.v1';
 
@@ -159,11 +159,12 @@ export const contactsAdapter = {
   async search(query) {
     const q = normalizeText(query);
     if (!q) return [];
-    const nq = q.replace(/[^\d+]/g, '');
+    // Номера матчим по значимым цифрам: «0775» находит «+373775…» и наоборот.
+    const nq = dialSearchKey(query);
     const all = await this.getAll();
     return all.filter((c) =>
       normalizeText(c.name).includes(q) ||
-      (nq && (c.numbers || []).some((n) => (n || '').replace(/[^\d+]/g, '').includes(nq)))
+      (nq && (c.numbers || []).some((n) => dialSearchKey(n).includes(nq)))
     );
   },
 
