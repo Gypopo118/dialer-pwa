@@ -38,7 +38,7 @@ export function initHomeScreen({ contextMenu }) {
   backspaceBtn.innerHTML = icons.backspace;
   callBtn.innerHTML = icons.phone;
   document.getElementById('search-icon').innerHTML = icons.search;
-  document.getElementById('search-close').innerHTML = '&times;';
+  document.getElementById('search-close').innerHTML = icons.close;
 
   buildKeypad();
   attachListScrollGesture(recentsEl, { onAutoHide: hideKeyboard });

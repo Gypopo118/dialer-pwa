@@ -39,6 +39,21 @@
   filter: none;
 }
 .search-bar .icon-btn { color: var(--text-secondary); }
+/* Крестик закрытия поиска — тот же круг, что у трубки в плашках истории */
+#search-close {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 3px 6px rgba(0,0,0,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+}
+#search-close:active { box-shadow: var(--shadow-key-pressed); }
+#search-close svg { width: 18px; height: 18px; flex-shrink: 0; }
 
 /* ===== История звонков ===== */
 .recents {
