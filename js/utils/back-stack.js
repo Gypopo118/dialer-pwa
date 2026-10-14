@@ -102,6 +102,30 @@ export function popLayerSilently(name) {
   history.back();
 }
 
+// Атомарная замена верхнего слоя без history.back — для перехода
+// «меню → история». Старая схема (close меню через history.back + тут же
+// pushState истории) уходила в гонку: back асинхронен, pushState стрелял
+// раньше popstate, и WebView оказывался на root-entry — следующий
+// системный Back видел canGoBack=false и сворачивал приложение вместо
+// закрытия истории. Здесь всё синхронно: ни навигации, ни popstate,
+// рассинхрону неоткуда взяться. Возвращает true при замене; если наверху
+// чужой слой — делает обычный pushLayer, чтобы экран открылся, а не
+// потерялся.
+export function replaceTopLayer(expectedName, nextName, onPop) {
+  const top = stack[stack.length - 1];
+  if (!top || top.name !== expectedName) {
+    pushLayer(nextName, onPop);
+    return false;
+  }
+  stack[stack.length - 1] = { name: nextName, onPop };
+  try {
+    history.replaceState({ dialerLayer: nextName, depth: stack.length }, '');
+  } catch (_) {
+    // noop — стек уже заменён, а replaceState popstate всё равно не шлёт
+  }
+  return true;
+}
+
 window.addEventListener('popstate', () => {
   if (ignoreNextPopstate) {
     ignoreNextPopstate = false;

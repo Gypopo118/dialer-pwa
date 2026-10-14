@@ -8,7 +8,9 @@ import {
   formatPhoneForDisplay, formatDuration, formatClockTime, formatDayLabel,
 } from '../utils/format.js';
 import { avatarHtml, warmPhotoCache, swapCachedPhotos } from '../utils/photo-cache.js';
-import { pushLayer, popLayerSilently, registerOverlay } from '../utils/back-stack.js';
+import {
+  pushLayer, popLayerSilently, replaceTopLayer, registerOverlay,
+} from '../utils/back-stack.js';
 
 const LAYER = 'contact-history';
 
@@ -16,12 +18,19 @@ export function initContactHistoryScreen({ onClosed, onContactChanged }) {
   const screen = document.getElementById('screen-contact-history');
   let current = null; // { number, contact }
 
-  async function open(row) {
+  async function open(row, opts = {}) {
     current = { number: row.number, contact: row.contact, lastCachedName: row.lastCachedName || null };
     screen.hidden = false;
     screen.classList.add('screen--enter-right');
     requestAnimationFrame(() => screen.classList.remove('screen--enter-right'));
-    pushLayer(LAYER, () => close(true));
+    if (opts.replaceLayer) {
+      // Переход из контекстного меню: оно уже спрятано без history.back,
+      // поэтому его слой заменяем атомарно через replaceState, а не
+      // закрываем+открываем (back+pushState давали гонку с рассинхроном).
+      replaceTopLayer(opts.replaceLayer, LAYER, () => close(true));
+    } else {
+      pushLayer(LAYER, () => close(true));
+    }
     await render();
   }
 

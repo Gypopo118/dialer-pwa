@@ -71,7 +71,7 @@ async function openEditContact(row) {
 }
 
 const contextMenu = initContextMenu({
-  onOpenHistory: (row) => contactHistoryScreen.open(row),
+  onOpenHistory: (row, opts) => contactHistoryScreen.open(row, opts),
   onOpenAddContact: (row) => {
     openAddContact({ name: '', number: row.number, numberEditable: false });
   },

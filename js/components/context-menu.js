@@ -64,8 +64,13 @@ export function initContextMenu({ onOpenHistory, onOpenAddContact, onOpenEditCon
         onChanged?.();
         break;
       case 'history':
-        close();
-        onOpenHistory(row);
+        // Атомарный переход «меню → история»: меню прячем БЕЗ history.back
+        // (true = историю не трогать), а его слой заменяется слоем истории
+        // внутри open() через replaceState. Старая схема (close с back
+        // + тут же pushState) давала гонку: WebView оказывался на root-entry
+        // и второй системный Back сворачивал приложение вместо возврата.
+        close(true);
+        onOpenHistory(row, { replaceLayer: LAYER });
         break;
     }
   }
