@@ -10,9 +10,11 @@
 // стек пуст — сворачивает само приложение (стандартное поведение браузера/
 // TWA, doesn't require extra code).
 //
-// ПРИ ПЕРЕХОДЕ НА CAPACITOR: дополнительно подписаться на CapacitorApp
-// ('backButton') и вызывать popLayer() же самой функцией, чтобы аппаратная
-// кнопка "назад" вела себя идентично жесту.
+// ПРИ ПЕРЕХОДЕ НА CAPACITOR: системный Back обрабатывает MainActivity
+// через OnBackPressedCallback (WebView.goBack -> тот же popstate ниже).
+// Подписку на CapacitorApp ('backButton') НЕ подключать: пакета
+// @capacitor/app в сборке нет (addListener молча не срабатывал бы),
+// а параллельная обработка одним жестом закрывала бы два слоя сразу.
 // ============================================================================
 
 const stack = [];
@@ -75,29 +77,13 @@ export function closeTopLayer() {
   return true;
 }
 
-// Аппаратная кнопка «назад» в нативной оболочке (Capacitor): ведёт себя
-// как жест — закрывает верхний слой через history. На корневом экране
-// приложение не закрывается, а сворачивается.
+// Аппаратная кнопка «назад» в нативной оболочке (Capacitor).
+// НЕ используется: пакета @capacitor/app в сборке нет, addListener молча
+// не срабатывал. Системный Back целиком на MainActivity (OnBackPressedCallback
+// -> WebView.goBack -> popstate ниже). Функция оставлена как no-op запасной
+// путь, чтобы вызов в main.js не трогать.
 export async function initNativeBackButton() {
-  try {
-    const cap = window.Capacitor;
-    if (!cap || typeof cap.isNativePlatform !== 'function' || !cap.isNativePlatform()) return false;
-    const App = (cap.Plugins && cap.Plugins.App)
-      || (typeof cap.registerPlugin === 'function' ? cap.registerPlugin('App') : null);
-    if (!App || typeof App.addListener !== 'function') return false;
-    await App.addListener('backButton', () => {
-      if (closeTopLayer()) return;
-      if (closeTopOverlay()) return;
-      try {
-        App.minimizeApp();
-      } catch (_) {
-        // noop
-      }
-    });
-    return true;
-  } catch (_) {
-    return false;
-  }
+  return false;
 }
 
 export function pushLayer(name, onPop) {
@@ -128,12 +114,24 @@ window.addEventListener('popstate', () => {
 // ===== Дополнительно: свайп от края экрана как явный триггер (для
 // окружений, где системный жест не эмулирует popstate — например, при
 // тестировании в десктоп-браузере). Работает поверх того же history.back().
+// В нативном APK ОТКЛЮЧЁН: там жест обрабатывает MainActivity
+// (OnBackPressedCallback -> goBack), а сработавший параллельно шим
+// закрывал бы второй слой одним жестом.
+const isNativeShell = (() => {
+  try {
+    const cap = window.Capacitor;
+    return !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
+  } catch (_) {
+    return false;
+  }
+})();
 const EDGE_ZONE = 24; // px от края экрана, где начинается распознавание
 const SWIPE_THRESHOLD = 60;
 
 let touchStartX = null;
 let touchStartEdge = null;
 
+if (!isNativeShell) {
 window.addEventListener('touchstart', (e) => {
   const x = e.touches[0].clientX;
   if (x <= EDGE_ZONE) { touchStartX = x; touchStartEdge = 'left'; }
@@ -150,3 +148,4 @@ window.addEventListener('touchend', (e) => {
   touchStartX = null;
   if (isBackSwipe) history.back();
 }, { passive: true });
+}
