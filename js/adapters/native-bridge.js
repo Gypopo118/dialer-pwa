@@ -199,6 +199,19 @@ export const nativeBridge = {
     }
   },
 
+  // Текст системного буфера обмена (APK). В браузере — null,
+  // вызывающий код должен откатиться на navigator.clipboard.
+  async getClipboardText() {
+    const p = getPlugin();
+    if (!p) return null;
+    try {
+      const r = await p.getClipboardText();
+      return (r && typeof r.text === 'string') ? r.text : '';
+    } catch (_) {
+      return null;
+    }
+  },
+
   // Подписка на события звонков из InCallService.
   // Возвращает async-функцию отписки.
   async onTelecomEvent(cb) {

@@ -6,6 +6,7 @@ import { buildRecentsList, filterRecents } from '../recents-model.js';
 import { contactsAdapter } from '../adapters/contacts-adapter.js';
 import { callLogAdapter } from '../adapters/call-log-adapter.js';
 import { telephonyAdapter } from '../adapters/telephony-adapter.js';
+import { nativeBridge } from '../adapters/native-bridge.js';
 import { formatPhoneForDisplay, formatDuration, formatRecentMeta, sanitizePhoneNumber, dialSearchKey, groupKeyForNumber } from '../utils/format.js';
 import { avatarHtml, warmPhotoCache, swapCachedPhotos } from '../utils/photo-cache.js';
 import { attachListScrollGesture } from '../utils/list-scroll-gesture.js';
@@ -393,10 +394,20 @@ export function initHomeScreen({ contextMenu }) {
   // вставляем в позицию курсора (выделение заменяется).
   async function pasteFromClipboard() {
     let raw = '';
+    // 1. APK: системный буфер через нативный мост. В WebView штатный
+    // navigator.clipboard.readText() часто заблокирован и молча падает —
+    // именно поэтому кнопка «молчала» на устройстве.
     try {
-      raw = await navigator.clipboard.readText();
-    } catch (_) {
-      return;
+      const native = await nativeBridge.getClipboardText();
+      if (typeof native === 'string' && native) raw = native;
+    } catch (_) { /* noop — пробуем веб-путь */ }
+    // 2. Браузер (PWA): стандартный Clipboard API.
+    if (!raw) {
+      try {
+        raw = await navigator.clipboard.readText();
+      } catch (_) {
+        return;
+      }
     }
     const cleaned = sanitizePhoneNumber(raw);
     if (!cleaned) return;

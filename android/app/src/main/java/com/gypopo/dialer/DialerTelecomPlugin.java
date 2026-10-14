@@ -688,4 +688,34 @@ public class DialerTelecomPlugin extends Plugin {
             default: return "missed";
         }
     }
+
+    // ---------- clipboard ----------
+    // Текст системного буфера обмена. Отдельного разрешения не требует:
+    // приложение на переднем плане читает буфер свободно (Android 10+),
+    // система сама покажет тост «приложение вставило из буфера».
+    // Нужен, т.к. navigator.clipboard.readText() в WebView часто
+    // заблокирован и молча падает — кнопка «Вставить» ничего не делает.
+    @PluginMethod
+    public void getClipboardText(PluginCall call) {
+        try {
+            android.content.ClipboardManager cm =
+                (android.content.ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+            JSObject ret = new JSObject();
+            if (cm == null || !cm.hasPrimaryClip()) {
+                ret.put("text", "");
+                call.resolve(ret);
+                return;
+            }
+            android.content.ClipData clip = cm.getPrimaryClip();
+            String text = "";
+            if (clip != null && clip.getItemCount() > 0) {
+                CharSequence cs = clip.getItemAt(0).coerceToText(getContext());
+                if (cs != null) text = cs.toString();
+            }
+            ret.put("text", text);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("clipboard read failed: " + e.getMessage());
+        }
+    }
 }
