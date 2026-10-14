@@ -18,19 +18,41 @@ export function formatClockTime(date) {
 }
 
 export function formatRelativeTime(date) {
-  const now = new Date();
-  const isSameDay = date.toDateString() === now.toDateString();
-  if (isSameDay) return formatClockTime(date);
+  const m = formatRecentMeta(date);
+  return m.top === m.bottom ? m.top : `${m.top}, ${m.bottom}`;
+}
 
+// Двухстрочная метка для плашек истории: сверху день («Сегодня»,
+// «Вчера», день недели, дата), снизу время звонка. Время видно всегда,
+// а не только за сегодняшний день.
+export function formatRecentMeta(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  const time = formatClockTime(d);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return { top: 'Сегодня', bottom: time };
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) return 'Вчера';
-
-  const diffDays = Math.floor((now - date) / 86400000);
+  if (d.toDateString() === yesterday.toDateString()) return { top: 'Вчера', bottom: time };
+  const diffDays = Math.floor((now - d) / 86400000);
   if (diffDays < 7) {
-    return date.toLocaleDateString('ru-RU', { weekday: 'short' });
+    const wd = d.toLocaleDateString('ru-RU', { weekday: 'long' });
+    return { top: wd.charAt(0).toUpperCase() + wd.slice(1), bottom: time };
   }
-  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+  return { top: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }), bottom: time };
+}
+
+// Чистка номера: скобки, пробелы, дефисы и прочий мусор убираются,
+// остаётся опциональный ведущий «+» и цифры. Один путь для вставки
+// из буфера и для вызова — tel: URI со скобками/пробелами ненадёжен.
+export function sanitizePhoneNumber(raw) {
+  const s = String(raw ?? '');
+  if (!s.trim()) return '';
+  const digits = s.replace(/\D/g, '');
+  if (!digits) return '';
+  const plusIdx = s.indexOf('+');
+  const firstDigitIdx = s.search(/\d/);
+  const keepPlus = plusIdx !== -1 && (firstDigitIdx === -1 || plusIdx < firstDigitIdx);
+  return (keepPlus ? '+' : '') + digits;
 }
 
 export function formatDayLabel(date) {

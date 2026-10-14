@@ -28,6 +28,7 @@ import { callLogAdapter } from './call-log-adapter.js';
 import { contactsAdapter } from './contacts-adapter.js';
 import { nativeBridge } from './native-bridge.js';
 import { blockedStore } from '../blocked-store.js';
+import { sanitizePhoneNumber } from '../utils/format.js';
 
 const listeners = new Set();
 
@@ -194,6 +195,9 @@ export const telephonyAdapter = {
   // Реальный вызов в APK: TelecomManager.placeCall() через нативный плагин.
   // Мок-ветка ниже используется только в браузере (PWA).
   async call(number, contact = null) {
+    // Финальная чистка перед tel: URI: скобки/пробелы/дефисы из вставки
+    // или ручного ввода не должны ломать placeCall.
+    number = sanitizePhoneNumber(number) || number;
     if (isNative()) {
       try {
         await nativeBridge.placeCall(number);

@@ -6,7 +6,7 @@ import { buildRecentsList, filterRecents } from '../recents-model.js';
 import { contactsAdapter } from '../adapters/contacts-adapter.js';
 import { callLogAdapter } from '../adapters/call-log-adapter.js';
 import { telephonyAdapter } from '../adapters/telephony-adapter.js';
-import { formatPhoneForDisplay, formatDuration, formatRelativeTime, dialSearchKey, groupKeyForNumber } from '../utils/format.js';
+import { formatPhoneForDisplay, formatDuration, formatRecentMeta, sanitizePhoneNumber, dialSearchKey, groupKeyForNumber } from '../utils/format.js';
 import { avatarHtml, warmPhotoCache, swapCachedPhotos } from '../utils/photo-cache.js';
 import { attachListScrollGesture } from '../utils/list-scroll-gesture.js';
 import { pushLayer, popLayerSilently, registerOverlay } from '../utils/back-stack.js';
@@ -17,7 +17,7 @@ const KEYPAD_LAYOUT = [
   ['7', '8', '9'],
   ['*', '0', '#'],
 ];
-const SIDE_COL = ['search', 'add-contact', 'plus', 'contacts'];
+const SIDE_COL = ['search', 'paste', 'add-contact', 'contacts'];
 const KEYBOARD_LAYER = 'keyboard';
 
 export function initHomeScreen({ contextMenu }) {
@@ -309,7 +309,11 @@ export function initHomeScreen({ contextMenu }) {
   backspaceBtn.addEventListener('touchend', () => clearTimeout(bsTimer));
 
   callBtn.addEventListener('click', async () => {
-    const number = uiStore.get().dialInput;
+    const raw = uiStore.get().dialInput;
+    if (!raw) return;
+    // Страховка второго уровня: скобки/пробелы/дефисы не должны доехать
+    // до tel: URI (первый уровень — чистка при вставке из буфера).
+    const number = sanitizePhoneNumber(raw) || raw;
     if (!number) return;
     const contact = await contactsAdapter.findByNumber(number);
     telephonyAdapter.call(number, contact);
@@ -329,8 +333,10 @@ export function initHomeScreen({ contextMenu }) {
         const key = document.createElement('button');
         key.className = 'key';
         key.dataset.digit = digit;
+        // «0» с маленьким «+» справа от цифры (как в обычных звонилках):
+        // короткий тап — «0», долгое нажатие — «+».
         key.innerHTML = digit === '0'
-          ? `<span class="digit">0</span><span class="sub">+</span>`
+          ? `<span class="digit digit--zero">0<span class="plus-side">+</span></span>`
           : `<span class="digit">${digit}</span>`;
         keypadEl.appendChild(key);
       });
@@ -348,8 +354,12 @@ export function initHomeScreen({ contextMenu }) {
     const zeroKey = keypadEl.querySelector('.key[data-digit="0"]');
     zeroKey.addEventListener('touchstart', () => {
       longPressTimer = setTimeout(() => {
-        // Долгое нажатие «0» меняет ноль перед курсором на «+».
+        // Долгое нажатие «0» — вставка «+» в позицию курсора.
+        // Если перед курсором стоит «0» из этого же нажатия — меняем его
+        // на «+» (чтобы не получалось «0+»), иначе просто вставляем «+».
+        // Работает и в пустом поле (раньше плюс в пустое поле не ставился).
         zeroLongFired = Date.now();
+        if (navigator.vibrate) { try { navigator.vibrate(20); } catch (_) { /* noop */ } }
         const cur = uiStore.get().dialInput || '';
         const { start, end } = effectiveCaret();
         if (end !== start) {
@@ -358,27 +368,49 @@ export function initHomeScreen({ contextMenu }) {
         } else if (start > 0 && cur[start - 1] === '0') {
           uiStore.set({ dialInput: cur.slice(0, start - 1) + '+' + cur.slice(start) });
           placeCaret(start);
+        } else {
+          uiStore.set({ dialInput: cur.slice(0, start) + '+' + cur.slice(start) });
+          placeCaret(start + 1);
         }
       }, 500);
     }, { passive: true });
     zeroKey.addEventListener('touchend', () => clearTimeout(longPressTimer));
+    zeroKey.addEventListener('touchcancel', () => clearTimeout(longPressTimer));
 
     keypadEl.querySelector('[data-side="search"]').addEventListener('click', () => {
       document.getElementById('search-toggle').click();
     });
+    keypadEl.querySelector('[data-side="paste"]').addEventListener('click', pasteFromClipboard);
     keypadEl.querySelector('[data-side="add-contact"]').addEventListener('click', () => {
       window.dispatchEvent(new CustomEvent('dialer:add-contact-blank'));
     });
-    keypadEl.querySelector('[data-side="plus"]').addEventListener('click', () => appendDigit('+'));
     keypadEl.querySelector('[data-side="contacts"]').addEventListener('click', () => {
       window.dispatchEvent(new CustomEvent('dialer:open-contacts'));
     });
   }
 
+  // Вставка номера из буфера обмена: чистим скобки/пробелы/дефисы,
+  // вставляем в позицию курсора (выделение заменяется).
+  async function pasteFromClipboard() {
+    let raw = '';
+    try {
+      raw = await navigator.clipboard.readText();
+    } catch (_) {
+      return;
+    }
+    const cleaned = sanitizePhoneNumber(raw);
+    if (!cleaned) return;
+    const cur = uiStore.get().dialInput || '';
+    const { start, end } = effectiveCaret();
+    uiStore.set({ dialInput: cur.slice(0, start) + cleaned + cur.slice(end) });
+    placeCaret(start + cleaned.length);
+    showKeyboard();
+  }
+
   function sideIconFor(name) {
     if (name === 'search') return icons.search;
+    if (name === 'paste') return icons.paste;
     if (name === 'add-contact') return icons.addContact;
-    if (name === 'plus') return icons.plus;
     if (name === 'contacts') return icons.contacts;
     return '';
   }
@@ -563,6 +595,7 @@ export function initHomeScreen({ contextMenu }) {
       contactId: isKnown ? row.contact.id : null,
       fallbackHtml: icons.person,
     });
+    const meta = formatRecentMeta(row.lastTimestamp);
 
     return `
       <div class="recent-row" data-key="${row.key}">
@@ -581,7 +614,7 @@ export function initHomeScreen({ contextMenu }) {
           </div>
         </div>
         <div class="recent-meta">
-          <span class="recent-time">${formatRelativeTime(row.lastTimestamp)}</span>
+          <span class="recent-time"><span class="recent-time__day">${meta.top}</span><span class="recent-time__clock">${meta.bottom}</span></span>
           <button class="recent-call-btn" data-call>${icons.phone}</button>
         </div>
       </div>
