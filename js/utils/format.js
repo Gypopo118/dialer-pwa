@@ -23,8 +23,9 @@ export function formatRelativeTime(date) {
 }
 
 // Двухстрочная метка для плашек истории: сверху день («Сегодня»,
-// «Вчера», день недели, дата), снизу время звонка. Время видно всегда,
-// а не только за сегодняшний день.
+// «Вчера» или полная дата ДД.ММ.ГГ), снизу время звонка. Время видно всегда,
+// а не только за сегодняшний день. День недели не используем: «Четверг»
+// не отвечает, какая именно это была неделя.
 export function formatRecentMeta(date) {
   const d = date instanceof Date ? date : new Date(date);
   const time = formatClockTime(d);
@@ -33,12 +34,10 @@ export function formatRecentMeta(date) {
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
   if (d.toDateString() === yesterday.toDateString()) return { top: 'Вчера', bottom: time };
-  const diffDays = Math.floor((now - d) / 86400000);
-  if (diffDays < 7) {
-    const wd = d.toLocaleDateString('ru-RU', { weekday: 'long' });
-    return { top: wd.charAt(0).toUpperCase() + wd.slice(1), bottom: time };
-  }
-  return { top: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }), bottom: time };
+  return {
+    top: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' }),
+    bottom: time,
+  };
 }
 
 // Чистка номера: скобки, пробелы, дефисы и прочий мусор убираются,
