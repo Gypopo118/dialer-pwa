@@ -30,6 +30,7 @@ export function initContextMenu({ onOpenHistory, onOpenAddContact, onOpenEditCon
       ${isKnown ? `<button class="sheet-item" data-action="edit">${icons.edit}<span>Изменить</span></button>` : ''}
       <button class="sheet-item ${blocked ? '' : 'sheet-item--danger'}" data-action="block">${icons.block}<span>${blocked ? 'Разблокировать' : 'Заблокировать'}</span></button>
       <button class="sheet-item" data-action="history">${icons.history}<span>История звонков</span></button>
+      <button class="sheet-item sheet-item--danger" data-action="delete">${icons.trash}<span>Удалить запись</span></button>
     `;
     sheet.querySelectorAll('.sheet-item').forEach((btn) => {
       btn.addEventListener('click', () => handleAction(btn.dataset.action));
@@ -71,6 +72,14 @@ export function initContextMenu({ onOpenHistory, onOpenAddContact, onOpenEditCon
         // и второй системный Back сворачивал приложение вместо возврата.
         close(true);
         onOpenHistory(row, { replaceLayer: LAYER });
+        break;
+      case 'delete':
+        // Удаляем всю историю звонков на этот номер: плашка исчезает из
+        // недавних и из персональной истории. В APK чистится системный
+        // CallLog (нужно WRITE_CALL_LOG), в браузере — localStorage.
+        close();
+        await callLogAdapter.deleteForNumber(row.number);
+        onChanged?.();
         break;
     }
   }

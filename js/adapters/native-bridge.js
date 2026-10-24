@@ -199,6 +199,19 @@ export const nativeBridge = {
     }
   },
 
+  // Удаление всей истории звонков на номер из системного CallLog.Calls
+  // (нужно WRITE_CALL_LOG). В браузере — null, вызывающий код
+  // откатывается на localStorage.
+  async deleteCallLogForNumber({ number = '' } = {}) {
+    const p = getPlugin();
+    if (!p) return null;
+    try {
+      return await p.deleteCallLogForNumber({ number: String(number) });
+    } catch (_) {
+      return null;
+    }
+  },
+
   // Текст системного буфера обмена (APK). В браузере — null,
   // вызывающий код должен откатиться на navigator.clipboard.
   async getClipboardText() {

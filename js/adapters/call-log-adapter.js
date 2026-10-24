@@ -16,7 +16,7 @@
 
 import { mockCallLog } from '../mock-data.js';
 import { nativeBridge } from './native-bridge.js';
-import { numbersEqual } from '../utils/format.js';
+import { numbersEqual, groupKeyForNumber } from '../utils/format.js';
 
 const STORAGE_KEY = 'dialer.calllog.v1';
 const listeners = new Set();
@@ -85,6 +85,21 @@ export const callLogAdapter = {
   async clearForNumber(number) {
     const norm = number.replace(/[^\d+]/g, '');
     entries = entries.filter((e) => e.number.replace(/[^\d+]/g, '') !== norm);
+    saveStore(entries);
+    notify();
+  },
+
+  // «Удалить запись» в меню плашки недавних: убирает ВСЮ историю звонков
+  // на этот номер (по правилу группировки плашек — хвост из 8 цифр).
+  // В APK чистим системный CallLog нативным методом, в браузере — моки.
+  async deleteForNumber(number) {
+    if (await nativeBridge.isAvailable()) {
+      await nativeBridge.deleteCallLogForNumber({ number });
+      this.refreshFromSystem();
+      return;
+    }
+    const key = groupKeyForNumber(number);
+    entries = entries.filter((e) => groupKeyForNumber(e.number) !== key);
     saveStore(entries);
     notify();
   },

@@ -742,6 +742,73 @@ public class DialerTelecomPlugin extends Plugin {
         }
     }
 
+    // «Удалить запись» в меню плашки недавних: вычищаем из системного
+    // CallLog все записи, совпадающие по правилу группировки приложения
+    // (хвост из 8 цифр — тот же собеседник в локальном и международном
+    // написании). Как и чтение, требует разрешения callLog (READ+WRITE).
+    @PluginMethod
+    public void deleteCallLogForNumber(PluginCall call) {
+        if (getPermissionState("callLog") != PermissionState.GRANTED) {
+            requestPermissionForAliases(new String[]{"callLog"}, call, "onDeleteCallLogPerms");
+            return;
+        }
+        resolveDeleteCallLog(call);
+    }
+
+    @PermissionCallback
+    private void onDeleteCallLogPerms(PluginCall call) {
+        if (getPermissionState("callLog") == PermissionState.GRANTED) {
+            resolveDeleteCallLog(call);
+        } else {
+            call.reject("call log permission denied");
+        }
+    }
+
+    private void resolveDeleteCallLog(PluginCall call) {
+        String number = call.getString("number");
+        if (number == null || number.trim().isEmpty()) {
+            call.reject("number required");
+            return;
+        }
+        String key = callLogGroupKey(number);
+        java.util.ArrayList<String> ids = new java.util.ArrayList<>();
+        try (Cursor c = getContext().getContentResolver().query(
+                CallLog.Calls.CONTENT_URI,
+                new String[]{CallLog.Calls._ID, CallLog.Calls.NUMBER},
+                null, null, null)) {
+            if (c != null) {
+                while (c.moveToNext()) {
+                    String n = c.getString(1);
+                    if (n != null && key.equals(callLogGroupKey(n))) {
+                        ids.add(String.valueOf(c.getLong(0)));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            call.reject("call log query failed: " + e.getMessage());
+            return;
+        }
+        if (!ids.isEmpty()) {
+            String selection = CallLog.Calls._ID + " IN (" + android.text.TextUtils.join(",", ids) + ")";
+            getContext().getContentResolver().delete(CallLog.Calls.CONTENT_URI, selection, null);
+        }
+        JSObject ret = new JSObject();
+        ret.put("deleted", ids.size());
+        call.resolve(ret);
+    }
+
+    // Ключ группировки номера — как в JS (utils/format.js, groupKeyForNumber):
+    // хвост из 8 цифр у полных номеров, короткие сервисные (112 и т.п.) целиком.
+    private static String callLogGroupKey(String number) {
+        StringBuilder digits = new StringBuilder();
+        for (int i = 0; i < number.length(); i++) {
+            char ch = number.charAt(i);
+            if (ch >= '0' && ch <= '9') digits.append(ch);
+        }
+        String d = digits.toString();
+        return d.length() >= 8 ? d.substring(d.length() - 8) : d;
+    }
+
     // ---------- clipboard ----------
     // Текст системного буфера обмена. Отдельного разрешения не требует:
     // приложение на переднем плане читает буфер свободно (Android 10+),
