@@ -84,6 +84,24 @@ const contextMenu = initContextMenu({
 const home = initHomeScreen({ contextMenu });
 initCallScreen();
 
+// ===== Номер из меню «Открыть с помощью» (tel:-intent из браузера) =====
+// Приложение зарегистрировано как звонилка: тап по номеру в браузере
+// присылает ACTION_DIAL/ACTION_VIEW с tel: URI. При тёплом старте номер
+// приходит событием 'dialIntent'; при холодном — событие уходит до загрузки
+// JS, поэтому номер лежит в нативе (pending) и забирается запросом.
+(async function initExternalNumber() {
+  try {
+    if (!(await nativeBridge.isAvailable())) return;
+    await nativeBridge.onDialIntent((e) => {
+      if (e && e.number) home.setExternalNumber(e.number);
+    });
+    const pending = await nativeBridge.getPendingDialNumber();
+    if (pending) home.setExternalNumber(pending);
+  } catch (_) {
+    // noop — в браузере (PWA) этого сценария нет
+  }
+})();
+
 // Раздел контактов: кнопка на клавиатуре вместо «C».
 
 const contactListScreen = initContactListScreen({

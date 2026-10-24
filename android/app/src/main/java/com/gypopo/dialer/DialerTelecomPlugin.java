@@ -57,6 +57,11 @@ public class DialerTelecomPlugin extends Plugin {
 
     private static DialerTelecomPlugin instance;
 
+    // Номер из внешнего tel:-интента (меню «Открыть с помощью» в браузере),
+    // доставленный до загрузки WebView. JS забирает его один раз при старте
+    // через getPendingDialNumber().
+    private static String pendingDialNumber;
+
     @Override
     public void load() {
         instance = this;
@@ -76,6 +81,54 @@ public class DialerTelecomPlugin extends Plugin {
         if (p != null) {
             p.notifyListeners(event, data);
         }
+    }
+
+    // ---------- внешний tel:-intent («Открыть с помощью» из браузера) ----------
+
+    // Достаёт номер из intent'а меню «Открыть с помощью»: ACTION_DIAL и
+    // ACTION_VIEW с data tel:... (так присылают браузеры и мессенджеры,
+    // когда тапают по номеру). Плюс фолбэк на устаревший EXTRA_PHONE_NUMBER.
+    // Возвращает null, если intent не про телефонный номер.
+    static String extractNumberFromIntent(Intent intent) {
+        if (intent == null || intent.getAction() == null) return null;
+        try {
+            String action = intent.getAction();
+            if (Intent.ACTION_DIAL.equals(action) || Intent.ACTION_VIEW.equals(action)) {
+                Uri data = intent.getData();
+                if (data != null && "tel".equalsIgnoreCase(data.getScheme())) {
+                    String ssp = data.getSchemeSpecificPart();
+                    if (ssp != null && !ssp.trim().isEmpty()) return ssp;
+                }
+                if (Intent.ACTION_DIAL.equals(action)) {
+                    String extra = intent.getStringExtra(Intent.EXTRA_PHONE_NUMBER);
+                    if (extra != null && !extra.trim().isEmpty()) return extra;
+                }
+            }
+        } catch (Exception ignored) {
+            // Чужой malformed intent — просто нет номера.
+        }
+        return null;
+    }
+
+    // Кладёт номер из внешнего intent'а: в pending (холодный старт — JS ещё
+    // не подписан, заберёт запросом) и событием 'dialIntent' (тёплый старт —
+    // слушатель уже висит, номер уходит в WebView сразу).
+    static void setPendingDialNumber(String number) {
+        if (number == null || number.trim().isEmpty()) return;
+        pendingDialNumber = number;
+        JSObject data = new JSObject();
+        data.put("number", number);
+        emit("dialIntent", data);
+    }
+
+    // JS забирает pending-номер один раз после загрузки (холодный старт).
+    @PluginMethod
+    public void getPendingDialNumber(PluginCall call) {
+        JSObject ret = new JSObject();
+        String number = pendingDialNumber;
+        pendingDialNumber = null;
+        ret.put("number", number == null ? "" : number);
+        call.resolve(ret);
     }
 
     // ---------- presence ----------

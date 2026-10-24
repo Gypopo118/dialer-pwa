@@ -418,6 +418,18 @@ export function initHomeScreen({ contextMenu }) {
     showKeyboard();
   }
 
+  // Номер извне — меню «Открыть с помощью» в браузере (tel:-intent из ОС).
+  // Заменяет содержимое поля набора (курсор в конец) и показывает
+  // клавиатуру, чтобы номер был виден сразу, даже если пользователь
+  // до этого свернул её. Чистка та же, что при вставке из буфера.
+  function setExternalNumber(raw) {
+    const cleaned = sanitizePhoneNumber(raw);
+    if (!cleaned) return;
+    uiStore.set({ dialInput: cleaned });
+    lastCaret = { start: cleaned.length, end: cleaned.length };
+    showKeyboard();
+  }
+
   function sideIconFor(name) {
     if (name === 'search') return icons.search;
     if (name === 'paste') return icons.paste;
@@ -632,5 +644,5 @@ export function initHomeScreen({ contextMenu }) {
     `;
   }
 
-  return { refreshRecents };
+  return { refreshRecents, setExternalNumber };
 }

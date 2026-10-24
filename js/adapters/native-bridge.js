@@ -212,6 +212,40 @@ export const nativeBridge = {
     }
   },
 
+  // Номер из внешнего intent'а (меню «Открыть с помощью» в браузере:
+  // ACTION_DIAL/ACTION_VIEW с tel: URI). При холодном старте событие
+  // 'dialIntent' уходит до загрузки JS — натив хранит номер в pending,
+  // и он забирается этим методом один раз при старте. Возвращает null,
+  // если номера нет (обычный запуск с иконки).
+  async getPendingDialNumber() {
+    const p = getPlugin();
+    if (!p) return null;
+    try {
+      const r = await p.getPendingDialNumber();
+      return (r && typeof r.number === 'string' && r.number) ? r.number : null;
+    } catch (_) {
+      return null;
+    }
+  },
+
+  // Подписка на внешние tel:-интенты, когда приложение уже запущено
+  // (тёплый старт): номер приходит событием 'dialIntent'.
+  // Возвращает async-функцию отписки.
+  async onDialIntent(cb) {
+    const p = getPlugin();
+    if (!p || typeof p.addListener !== 'function') return () => {};
+    try {
+      const handle = await p.addListener('dialIntent', cb);
+      return () => {
+        try {
+          handle.remove();
+        } catch (_) { /* noop */ }
+      };
+    } catch (_) {
+      return () => {};
+    }
+  },
+
   // Подписка на события звонков из InCallService.
   // Возвращает async-функцию отписки.
   async onTelecomEvent(cb) {

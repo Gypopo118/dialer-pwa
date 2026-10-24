@@ -1,5 +1,6 @@
 package com.gypopo.dialer;
 
+import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
@@ -22,6 +23,11 @@ public class MainActivity extends BridgeActivity {
             setShowWhenLocked(true);
             setTurnScreenOn(true);
         }
+        // Номер из меню «Открыть с помощью» (tel:-intent из браузера).
+        // Холодный старт: WebView ещё не загружен, слушать событие некому —
+        // номер складывается в pending внутри плагина, JS заберёт его
+        // запросом после загрузки (см. DialerTelecomPlugin.getPendingDialNumber).
+        handleDialIntent(getIntent());
         // Системная кнопка/жест «назад» (targetSdk 36, predictive back):
         // каноничный путь — OnBackPressedCallback через диспетчер, а не
         // переопределение устаревшего onBackPressed(), до которого жест
@@ -57,5 +63,22 @@ public class MainActivity extends BridgeActivity {
                 }
             }
         });
+    }
+
+    // Тёплый старт (launchMode="singleTask", приложение свёрнуто): Android
+    // доставляет новый intent сюда, а не пересоздаёт activity. WebView жив,
+    // слушатель 'dialIntent' уже подписан — номер уходит в UI сразу.
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleDialIntent(intent);
+    }
+
+    private void handleDialIntent(Intent intent) {
+        String number = DialerTelecomPlugin.extractNumberFromIntent(intent);
+        if (number != null) {
+            DialerTelecomPlugin.setPendingDialNumber(number);
+        }
     }
 }
