@@ -321,6 +321,12 @@ export function initHomeScreen({ contextMenu }) {
   });
 
   // ===== Клавиатура набора =====
+  // Короткий виброотклик клавиш — самый короткий вариант (20 мс),
+  // тот же, что и при долгом нажатии «0».
+  function vibrateKeyFeedback() {
+    if (navigator.vibrate) { try { navigator.vibrate(20); } catch (_) { /* noop */ } }
+  }
+
   function buildKeypad() {
     keypadEl.innerHTML = '';
     KEYPAD_LAYOUT.forEach((row, rowIdx) => {
@@ -360,7 +366,7 @@ export function initHomeScreen({ contextMenu }) {
         // на «+» (чтобы не получалось «0+»), иначе просто вставляем «+».
         // Работает и в пустом поле (раньше плюс в пустое поле не ставился).
         zeroLongFired = Date.now();
-        if (navigator.vibrate) { try { navigator.vibrate(20); } catch (_) { /* noop */ } }
+        vibrateKeyFeedback();
         const cur = uiStore.get().dialInput || '';
         const { start, end } = effectiveCaret();
         if (end !== start) {
@@ -377,6 +383,19 @@ export function initHomeScreen({ contextMenu }) {
     }, { passive: true });
     zeroKey.addEventListener('touchend', () => clearTimeout(longPressTimer));
     zeroKey.addEventListener('touchcancel', () => clearTimeout(longPressTimer));
+
+    // Отклик нажатия любой клавиши, как в штатной клавиатуре Google:
+    // вибрация в момент касания + корпус клавиши быстро светлеет до
+    // светло-серого, а после отпускания плавно гаснет обратно.
+    keypadEl.querySelectorAll('.key').forEach((key) => {
+      const unlit = () => key.classList.remove('key--lit');
+      key.addEventListener('touchstart', () => {
+        vibrateKeyFeedback();
+        key.classList.add('key--lit');
+      }, { passive: true });
+      key.addEventListener('touchend', unlit, { passive: true });
+      key.addEventListener('touchcancel', unlit, { passive: true });
+    });
 
     keypadEl.querySelector('[data-side="search"]').addEventListener('click', () => {
       document.getElementById('search-toggle').click();

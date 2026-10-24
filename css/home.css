@@ -376,11 +376,15 @@
   justify-content: center;
   color: var(--text-primary);
   position: relative;
+  transition: background 200ms ease-out;
 }
-.key:active {
-  background: var(--surface-2-pressed);
-  box-shadow: var(--shadow-key-pressed);
-  transform: translateY(1px);
+/* Отклик нажатия (как в штатной клавиатуре Google): клавиша быстро
+   светлеет до светло-серого, а после отпускания плавно гаснет обратно.
+   Быстрый вход даёт transition самой подсветки, медленный спад — transition .key. */
+.key:active,
+.key--lit {
+  background: linear-gradient(180deg, var(--surface-2-lit-top), var(--surface-2-lit) 55%);
+  transition: background 50ms ease-out;
 }
 .key .digit {
   font-size: var(--fs-key);
