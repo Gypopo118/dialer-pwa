@@ -30,7 +30,14 @@
         <button class="icon-btn" id="search-close" aria-label="Закрыть поиск">✕</button>
       </div>
 
-      <div class="recents" id="recents"></div>
+      <div class="recents" id="recents">
+        <!-- История строится один раз; фильтр набора только скрывает строки.
+             Контакты при наборе живут в отдельном блоке и обновляются
+             с собственной задержкой (см. home-screen.js). -->
+        <div id="recents-history"></div>
+        <div class="recents-contacts" id="recents-contacts" hidden></div>
+        <div class="recents-empty" id="recents-empty" hidden>Пока нет истории звонков</div>
+      </div>
 
       <button class="keyboard-peek" id="keyboard-peek" hidden>Клавиатура</button>
 

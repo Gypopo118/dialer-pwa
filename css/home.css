@@ -78,6 +78,9 @@
   min-height: 56px;
 }
 .recent-row:active { background: var(--surface-1-pressed); }
+/* display:flex у строки перебивает UA-правило [hidden] — фильтр набора
+   скрывает готовые строки именно этим состоянием, без пересборки DOM. */
+.recent-row[hidden] { display: none; }
 /* Страховка: ни одна инлайн-SVG в строке не должна раздувать layout */
 .recent-row svg { max-width: 100%; max-height: 100%; }
 

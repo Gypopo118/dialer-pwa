@@ -4,6 +4,7 @@ www/
 Thumbs.db
 .codegraph/
 .omo/
+.zcode/
 *.log
 # Capacitor / Android generated
 android/app/build/

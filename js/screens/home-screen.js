@@ -67,11 +67,13 @@ export function initHomeScreen({ contextMenu }) {
     dialInput.classList.toggle('dial-input--empty', !state.dialInput);
     backspaceBtn.hidden = !state.dialInput;
     callBtn.toggleAttribute('disabled', !state.dialInput);
-    // Набранные цифры вживую фильтруют историю (smart dial), но с длинным
-    // дебаунсом: фильтрация и подгрузка фото не должны тормозить сами цифры.
+    // Набранные цифры вживую фильтруют историю (smart dial), но список
+    // не пересобирается: строки уже в DOM, фильтр только скрывает/показывает
+    // их. Применяем следующим кадром — цифра успевает отрисоваться раньше
+    // любой работы со списком.
     if (state.dialInput !== lastDialFilter) {
       lastDialFilter = state.dialInput;
-      scheduleRender(350);
+      onDialInputChanged(state.dialInput || '');
     }
   });
   dialInput.value = uiStore.get().dialInput || '';
@@ -510,13 +512,26 @@ export function initHomeScreen({ contextMenu }) {
   keyboardPeek.addEventListener('click', showKeyboard);
 
   // ===== Список недавних =====
+  // История рисуется один раз на смену данных (#recents-history). Набор цифр
+  // не пересобирает DOM: фильтр только скрывает/показывает уже существующие
+  // строки. Поэтому цифра не ждёт перерисовку списка даже на длинной истории.
+  const historyEl = document.getElementById('recents-history');
+  const contactsEl = document.getElementById('recents-contacts');
+  const emptyEl = document.getElementById('recents-empty');
+
   let renderSeq = 0;
   let lastRecentsHtml = '';
+  let lastContactsHtml = '';
+  let historyCache = []; // [{ el, key, dialKey, row }]
+  let visibleRowCount = 0;
+  let lastAppliedDkey = null;
+  let savedScrollTop = 0;
+  let filterRaf = 0;
 
-  // Ввод не ждёт фильтр: цифра ложится в поле синхронно, а тяжёлый
-  // пересчёт списка едет с дебаунсом после паузы в наборе.
+  // Строку поиска (в отличие от набора) пересобираем целиком: там матчинг
+  // идёт и по именам, а не только по цифрам. Дебаунс остаётся прежним.
   let renderTimer = null;
-  function scheduleRender(delay = 180) {
+  function scheduleRender(delay = 150) {
     if (renderTimer) clearTimeout(renderTimer);
     renderTimer = setTimeout(() => {
       renderTimer = null;
@@ -524,104 +539,93 @@ export function initHomeScreen({ contextMenu }) {
     }, delay);
   }
 
+  // Поиск контактов при наборе — отдельный дебаунс: история фильтруется
+  // мгновенно, контакты догоняют после паузы и на цифры не влияют.
+  let contactsTimer = null;
+  let contactsSeq = 0;
+  function scheduleContacts(digits) {
+    if (contactsTimer) { clearTimeout(contactsTimer); contactsTimer = null; }
+    const seq = ++contactsSeq;
+    if (!digits) { renderContactsBlock([]); return; }
+    contactsTimer = setTimeout(async () => {
+      contactsTimer = null;
+      if (seq !== contactsSeq) return;
+      let found = [];
+      try {
+        found = await contactsAdapter.search(digits);
+      } catch (_) {
+        found = [];
+      }
+      if (seq !== contactsSeq) return;
+      const cur = (uiStore.get().dialInput || '').replace(/[^\d+]/g, '');
+      if (cur !== digits) return; // номер уже изменился
+      renderContactsBlock(filterContactMatches(found, digits));
+    }, 250);
+  }
+
+  // Контакт уже виден в истории (в любом написании) — не дублируем.
+  // Сверяемся со всей историей, а не только с видимыми строками.
+  function filterContactMatches(found, digits) {
+    const dkey = dialSearchKey(digits);
+    const inHistory = new Set();
+    allRows.forEach((r) => (r.entries || []).forEach((e) => inHistory.add(groupKeyForNumber(e.number))));
+    return found.filter((c) =>
+      (c.numbers || []).some((n) => dialSearchKey(n).includes(dkey))
+      && !((c.numbers || []).some((n) => inHistory.has(groupKeyForNumber(n))))
+    );
+  }
+
   async function refreshRecents() {
     allRows = await buildRecentsList();
     renderRecents();
   }
 
-  // Поиск и набор фильтруют список вживую:
-  // - строка поиска — по именам и номерам, включая контакты без истории;
-  // - набранные цифры — по истории звонков (+ совпавшие контакты ниже).
-  // Цифры в поле ложатся синхронно и никогда не ждут фильтр: строки истории
-  // красятся сразу первым проходом, а тяжёлый поиск контактов и фото
-  // доклеиваются вторым проходом и на ввод уже не влияют.
-  async function renderRecents() {
-    const seq = ++renderSeq;
-    const { searchQuery, searchOpen, dialInput: dial } = uiStore.get();
-    const q = (searchQuery || '').trim();
-    const digits = (dial || '').replace(/[^\d+]/g, '');
-    const dkey = dialSearchKey(digits);
-
-    let rows = allRows;
-    let needContacts = null;
-    if (searchOpen && q) {
-      rows = filterRecents(allRows, q);
-      needContacts = q;
-    } else if (dkey) {
-      // Один и тот же номер при любом написании: «0775», «775», «+373775».
-      rows = allRows.filter((row) => dialSearchKey(row.number).includes(dkey));
-      needContacts = digits;
-    }
-    // Первый проход — мгновенно и без фото: список следует за пальцем.
-    // Фото откладываем только пока реально набираем (dkey непуст).
-    const isTyping = !searchOpen && !!dkey;
-    paintRecents(rows, [], seq, isTyping);
-    if (needContacts === null || seq !== renderSeq) return;
-    let found = [];
-    try {
-      found = await contactsAdapter.search(needContacts);
-    } catch (_) {
-      found = [];
-    }
-    if (seq !== renderSeq) return;
-    let matchedContacts = [];
-    if (searchOpen && q) {
-      matchedContacts = found;
-    } else {
-      // Контакт уже виден в истории (даже в другом написании) — не дублируем.
-      const inHistory = new Set();
-      rows.forEach((r) => (r.entries || []).forEach((e) => inHistory.add(groupKeyForNumber(e.number))));
-      matchedContacts = found.filter((c) =>
-        (c.numbers || []).some((n) => dialSearchKey(n).includes(dkey))
-        && !((c.numbers || []).some((n) => inHistory.has(groupKeyForNumber(n))))
-      );
-    }
-    paintRecents(rows, matchedContacts, seq, isTyping);
-  }
-
-  function paintRecents(rows, matchedContacts, seq, deferPhotos) {
-    if (seq !== renderSeq) return;
-    const { searchQuery, searchOpen, dialInput: dial } = uiStore.get();
-    const hasFilter = (searchOpen && (searchQuery || '').trim()) || (dial || '').replace(/[^\d+]/g, '');
-    if (!rows.length && !matchedContacts.length) {
-      lastRecentsHtml = '';
-      recentsEl.innerHTML = `<div class="recents-empty">${hasFilter ? 'Ничего не найдено' : 'Пока нет истории звонков'}</div>`;
-      return;
-    }
-    const html = rows.map(rowTemplate).join('')
-      + (matchedContacts.length
-        ? `<div class="recents-group-label">Контакты</div>` + matchedContacts.map(contactRowTemplate).join('')
-        : '');
-    // Тот же HTML повторно не трогаем: слушатели живы, скролл не прыгает.
-    if (html === lastRecentsHtml) return;
+  // Полная отрисовка истории: только смена данных или поиск, не набор.
+  function renderHistory(rows) {
+    const html = rows.map(rowTemplate).join('');
+    if (html === lastRecentsHtml && historyCache.length) { syncEmptyState(); return; }
     lastRecentsHtml = html;
     const keepScroll = recentsEl.scrollTop;
-    recentsEl.innerHTML = html;
-    recentsEl.scrollTop = keepScroll;
-    bindHistoryRows(rows);
-    bindContactRows(matchedContacts);
-    // Фото греем только вне набора: прогрев кэша и подмена картинок
-    // на каждый тап давали тот самый лаг первых цифр.
-    if (!deferPhotos) afterRenderPhotos(rows, matchedContacts);
+    historyEl.innerHTML = html;
+    const byKey = new Map(rows.map((r) => [r.key, r]));
+    historyCache = [];
+    historyEl.querySelectorAll('.recent-row[data-key]').forEach((el) => {
+      const row = byKey.get(el.dataset.key);
+      if (!row) { el.remove(); return; }
+      historyCache.push({ el, key: row.key, dialKey: dialSearchKey(row.number), row });
+      bindHistoryRow(el, row);
+    });
+    visibleRowCount = historyCache.length;
+    setScrollTop(keepScroll);
+    syncEmptyState();
   }
 
-  function bindHistoryRows(rows) {
-    recentsEl.querySelectorAll('.recent-row[data-key]').forEach((el) => {
-      const row = rows.find((r) => r.key === el.dataset.key);
-      if (!row) return;
-      el.addEventListener('click', (e) => {
-        if (e.target.closest('[data-call]')) return;
-        contextMenu.open(row);
-      });
-      el.querySelector('[data-call]').addEventListener('click', () => {
-        telephonyAdapter.call(row.number, row.contact);
-      });
+  function bindHistoryRow(el, row) {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-call]')) return;
+      contextMenu.open(row);
+    });
+    el.querySelector('[data-call]').addEventListener('click', () => {
+      telephonyAdapter.call(row.number, row.contact);
     });
   }
 
+  function renderContactsBlock(list) {
+    const html = list.length
+      ? `<div class="recents-group-label">Контакты</div>` + list.map(contactRowTemplate).join('')
+      : '';
+    if (html === lastContactsHtml) { syncEmptyState(); return; }
+    lastContactsHtml = html;
+    contactsEl.innerHTML = html;
+    contactsEl.hidden = !html;
+    bindContactRows(list);
+    syncEmptyState();
+  }
+
   function bindContactRows(list) {
-    recentsEl.querySelectorAll('[data-contact]').forEach((el) => {
-      const c = list.find((x) => String(x.id) === el.dataset.contact);
+    const byId = new Map(list.map((c) => [String(c.id), c]));
+    contactsEl.querySelectorAll('[data-contact]').forEach((el) => {
+      const c = byId.get(el.dataset.contact);
       if (!c) return;
       const number = (c.numbers && c.numbers[0]) || '';
       el.addEventListener('click', (e) => {
@@ -632,6 +636,95 @@ export function initHomeScreen({ contextMenu }) {
         telephonyAdapter.call(number, c);
       });
     });
+  }
+
+  // Фильтр набора: только видимость готовых строк. Ни innerHTML, ни новых
+  // узлов, ни повторной привязки слушателей.
+  function applyDialFilter(dkey) {
+    const { searchOpen, searchQuery } = uiStore.get();
+    // При непустом поиске список строк уже сужен renderHistory — не трогаем.
+    if (searchOpen && (searchQuery || '').trim()) return;
+    const filtering = !!dkey;
+    const was = !!lastAppliedDkey;
+    if (filtering && !was) savedScrollTop = recentsEl.scrollTop;
+    let visible = 0;
+    for (const item of historyCache) {
+      const show = !filtering || item.dialKey.includes(dkey);
+      if (show) visible++;
+      if (item.el.hidden === show) item.el.hidden = !show;
+    }
+    visibleRowCount = visible;
+    if (filtering && !was) setScrollTop(0);
+    else if (!filtering && was) setScrollTop(savedScrollTop);
+    lastAppliedDkey = dkey;
+    syncEmptyState();
+  }
+
+  function syncEmptyState() {
+    const { searchOpen, searchQuery } = uiStore.get();
+    const dkey = dialSearchKey((uiStore.get().dialInput || '').replace(/[^\d+]/g, ''));
+    const hasContacts = !contactsEl.hidden && contactsEl.childElementCount > 0;
+    if (visibleRowCount === 0 && !hasContacts) {
+      const filtered = (searchOpen && (searchQuery || '').trim()) || dkey;
+      emptyEl.textContent = filtered ? 'Ничего не найдено' : 'Пока нет истории звонков';
+      emptyEl.hidden = false;
+    } else {
+      emptyEl.hidden = true;
+    }
+  }
+
+  function setScrollTop(top) {
+    // .recents имеет scroll-behavior: smooth — для фильтра нужен мгновенный.
+    recentsEl.style.scrollBehavior = 'auto';
+    recentsEl.scrollTop = top;
+    recentsEl.style.scrollBehavior = '';
+  }
+
+  // Цифра уже в поле (синхронно). Фильтр — следующим кадром, чтобы ввод
+  // не ждал список; контакты — отдельным дебаунсом.
+  function onDialInputChanged(value) {
+    const digits = (value || '').replace(/[^\d+]/g, '');
+    const dkey = dialSearchKey(digits);
+    if (filterRaf) cancelAnimationFrame(filterRaf);
+    filterRaf = requestAnimationFrame(() => {
+      filterRaf = 0;
+      applyDialFilter(dkey);
+    });
+    scheduleContacts(digits);
+  }
+
+  // Поиск и refresh: единственные пути полной отрисовки. Набор сюда не ходит.
+  async function renderRecents() {
+    const seq = ++renderSeq;
+    const { searchQuery, searchOpen, dialInput: dial } = uiStore.get();
+    const q = (searchQuery || '').trim();
+    const dkey = dialSearchKey((dial || '').replace(/[^\d+]/g, ''));
+
+    // При наборе база — вся история: её сужает applyDialFilter. При поиске
+    // список строк сужается сразу (поиск матчит и имена, и номера).
+    let rows = allRows;
+    if (searchOpen && q) rows = filterRecents(allRows, q);
+
+    renderHistory(rows);
+    applyDialFilter(dkey);
+
+    if (!searchOpen || !q) {
+      if (!dkey) {
+        renderContactsBlock([]);
+        afterRenderPhotos(rows, []);
+      }
+      return; // контактами набора управляет scheduleContacts
+    }
+
+    let found = [];
+    try {
+      found = await contactsAdapter.search(q);
+    } catch (_) {
+      found = [];
+    }
+    if (seq !== renderSeq) return;
+    renderContactsBlock(found);
+    afterRenderPhotos(rows, found);
   }
 
   function afterRenderPhotos(rows, matchedContacts) {
