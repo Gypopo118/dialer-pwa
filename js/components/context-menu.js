@@ -26,10 +26,10 @@ export function initContextMenu({ onOpenHistory, onOpenAddContact, onOpenEditCon
       <div class="context-sheet__handle"></div>
       <div class="context-sheet__title">${isKnown ? row.contact.name : row.number}</div>
       <button class="sheet-item" data-action="copy">${icons.copy}<span>Копировать номер</span></button>
-      ${!isKnown ? `<button class="sheet-item" data-action="add">${icons.personAdd}<span>Добавить в контакты</span></button>` : ''}
-      ${isKnown ? `<button class="sheet-item" data-action="edit">${icons.edit}<span>Изменить</span></button>` : ''}
-      <button class="sheet-item ${blocked ? '' : 'sheet-item--danger'}" data-action="block">${icons.block}<span>${blocked ? 'Разблокировать' : 'Заблокировать'}</span></button>
       <button class="sheet-item" data-action="history">${icons.history}<span>История звонков</span></button>
+      ${!isKnown ? `<button class="sheet-item" data-action="add">${icons.personAdd}<span>Добавить в контакты</span></button>` : ''}
+      ${isKnown ? `<button class="sheet-item" data-action="edit">${icons.edit}<span>Изменить контакт</span></button>` : ''}
+      <button class="sheet-item ${blocked ? '' : 'sheet-item--danger'}" data-action="block">${icons.block}<span>${blocked ? 'Разблокировать' : 'Заблокировать'}</span></button>
       <button class="sheet-item sheet-item--danger" data-action="delete">${icons.trash}<span>Удалить запись</span></button>
     `;
     sheet.querySelectorAll('.sheet-item').forEach((btn) => {
