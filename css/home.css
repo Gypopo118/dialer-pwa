@@ -377,6 +377,9 @@
   color: var(--text-primary);
   position: relative;
   transition: background 200ms ease-out;
+  /* Палец не должен ждать распознавания жеста: цифра вводится на
+     pointerdown, а double-tap-zoom на клавише не нужен. */
+  touch-action: manipulation;
 }
 /* Отклик нажатия (как в штатной клавиатуре Google): клавиша быстро
    светлеет до светло-серого, а после отпускания плавно гаснет обратно.

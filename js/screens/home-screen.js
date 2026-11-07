@@ -349,52 +349,75 @@ export function initHomeScreen({ contextMenu }) {
       });
     });
 
-    keypadEl.querySelectorAll('.key[data-digit]').forEach((key) => {
-      key.addEventListener('click', () => {
-        // Долгое нажатие «0» уже вставило «+» — повторный клик пропускаем.
-        if (key.dataset.digit === '0' && Date.now() - zeroLongFired < 700) return;
-        appendDigit(key.dataset.digit);
-      });
-    });
-    let longPressTimer = null;
-    let zeroLongFired = 0;
-    const zeroKey = keypadEl.querySelector('.key[data-digit="0"]');
-    zeroKey.addEventListener('touchstart', () => {
-      longPressTimer = setTimeout(() => {
-        // Долгое нажатие «0» — вставка «+» в позицию курсора.
-        // Если перед курсором стоит «0» из этого же нажатия — меняем его
-        // на «+» (чтобы не получалось «0+»), иначе просто вставляем «+».
-        // Работает и в пустом поле (раньше плюс в пустое поле не ставился).
-        zeroLongFired = Date.now();
+    // Долгое нажатие «0»: ноль уже стоит в поле (вставлен на касании),
+    // через 500 мс меняем именно его на «+». Короткий тап даёт «0» сразу,
+    // удержание — «+», и «0+» в поле не появляется.
+    let zeroTimer = null;
+    let zeroIndex = -1;
+
+    function startZeroLongPress(index) {
+      clearTimeout(zeroTimer);
+      zeroIndex = index;
+      zeroTimer = setTimeout(() => {
+        zeroTimer = null;
         vibrateKeyFeedback();
         const cur = uiStore.get().dialInput || '';
-        const { start, end } = effectiveCaret();
-        if (end !== start) {
+        if (zeroIndex >= 0 && cur[zeroIndex] === '0') {
+          uiStore.set({ dialInput: cur.slice(0, zeroIndex) + '+' + cur.slice(zeroIndex + 1) });
+          placeCaret(zeroIndex + 1);
+        } else {
+          // Поле изменилось другим нажатием — обычное поведение long-press:
+          // «+» в текущую позицию каретки.
+          const { start, end } = effectiveCaret();
           uiStore.set({ dialInput: cur.slice(0, start) + '+' + cur.slice(end) });
           placeCaret(start + 1);
-        } else if (start > 0 && cur[start - 1] === '0') {
-          uiStore.set({ dialInput: cur.slice(0, start - 1) + '+' + cur.slice(start) });
-          placeCaret(start);
-        } else {
-          uiStore.set({ dialInput: cur.slice(0, start) + '+' + cur.slice(start) });
-          placeCaret(start + 1);
         }
+        zeroIndex = -1;
       }, 500);
-    }, { passive: true });
-    zeroKey.addEventListener('touchend', () => clearTimeout(longPressTimer));
-    zeroKey.addEventListener('touchcancel', () => clearTimeout(longPressTimer));
+    }
+
+    function cancelZeroLongPress() {
+      clearTimeout(zeroTimer);
+      zeroTimer = null;
+      zeroIndex = -1;
+    }
+
+    // Цифра вводится в момент касания (pointerdown), а не по отпусканию:
+    // click приходит только на touchend и добавлял 40–120 мс задержки,
+    // из-за чего цифра казалась отставшей от уже вспыхнувшей клавиши.
+    // При сдвиге пальца браузер мог вовсе не синтезировать click — цифра
+    // терялась. click остаётся только для клавиатуры и скринридера
+    // (у них detail === 0); у клика от пальца/мыши detail >= 1, иначе
+    // каждая цифра вводилась бы дважды.
+    keypadEl.querySelectorAll('.key[data-digit]').forEach((key) => {
+      const digit = key.dataset.digit;
+      key.addEventListener('pointerdown', (e) => {
+        if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return;
+        const index = appendDigit(digit);
+        if (digit === '0') startZeroLongPress(index);
+      });
+      key.addEventListener('click', (e) => {
+        if (e.detail !== 0) return;
+        appendDigit(digit);
+      });
+    });
+
+    const zeroKey = keypadEl.querySelector('.key[data-digit="0"]');
+    zeroKey.addEventListener('pointerup', cancelZeroLongPress);
+    zeroKey.addEventListener('pointercancel', cancelZeroLongPress);
 
     // Отклик нажатия любой клавиши, как в штатной клавиатуре Google:
     // вибрация в момент касания + корпус клавиши быстро светлеет до
     // светло-серого, а после отпускания плавно гаснет обратно.
     keypadEl.querySelectorAll('.key').forEach((key) => {
       const unlit = () => key.classList.remove('key--lit');
-      key.addEventListener('touchstart', () => {
+      key.addEventListener('pointerdown', () => {
         vibrateKeyFeedback();
         key.classList.add('key--lit');
       }, { passive: true });
-      key.addEventListener('touchend', unlit, { passive: true });
-      key.addEventListener('touchcancel', unlit, { passive: true });
+      key.addEventListener('pointerup', unlit, { passive: true });
+      key.addEventListener('pointercancel', unlit, { passive: true });
+      key.addEventListener('pointerleave', unlit, { passive: true });
     });
 
     keypadEl.querySelector('[data-side="search"]').addEventListener('click', () => {
@@ -457,12 +480,15 @@ export function initHomeScreen({ contextMenu }) {
     return '';
   }
 
+  // Возвращает позицию вставленного символа: по ней long-press «0» находит
+  // именно тот ноль, который поставило это же нажатие.
   function appendDigit(d) {
     const cur = uiStore.get().dialInput || '';
     const { start, end } = effectiveCaret();
     uiStore.set({ dialInput: cur.slice(0, start) + d + cur.slice(end) });
     placeCaret(start + d.length);
     showKeyboard();
+    return start;
   }
 
   // ===== Показ/скрытие клавиатуры (свайп по списку недавних) =====
