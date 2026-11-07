@@ -57,6 +57,11 @@ export const callLogAdapter = {
         cachedName: e.cachedName || null,
       }));
     }
+    // В APK локального журнала нет: звонки пишет система. Пустой ответ здесь
+    // означает «нет разрешения / провайдер недоступен», а не «нет истории»,
+    // поэтому демо-моки из localStorage показывать нельзя — иначе на телефоне
+    // после переустановки вместо журнала звонков видны выдуманные номера.
+    if (await nativeBridge.isAvailable()) return [];
     return [...entries].sort((a, b) => b.timestamp - a.timestamp);
   },
 
