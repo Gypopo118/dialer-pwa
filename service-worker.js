@@ -3,7 +3,7 @@
 // контейнер грузит файлы локально), но остаётся нужен, если приложение
 // также публикуется как обычный PWA/TWA.
 
-const CACHE_NAME = 'dialer-shell-v6';
+const CACHE_NAME = 'dialer-shell-v7';
 const SHELL_FILES = [
   './',
   './index.html',

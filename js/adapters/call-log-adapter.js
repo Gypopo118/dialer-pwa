@@ -21,11 +21,26 @@ import { numbersEqual, groupKeyForNumber } from '../utils/format.js';
 const STORAGE_KEY = 'dialer.calllog.v1';
 const listeners = new Set();
 
+// Нативная оболочка (APK). Проверка синхронная: window.Capacitor
+// инжектируется до наших скриптов.
+function isNativeShell() {
+  try {
+    const cap = window.Capacitor;
+    return !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
+  } catch (_) {
+    return false;
+  }
+}
+
 function loadStore() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw).map((e) => ({ ...e, timestamp: new Date(e.timestamp) }));
   } catch (e) { /* игнорируем повреждённое хранилище */ }
+  // В APK демо-журнал не заводим даже в localStorage: единственный источник
+  // истории там — системный CallLog.Calls. После переустановки на телефоне
+  // не должно появиться ни одной выдуманной строки.
+  if (isNativeShell()) return [];
   const seeded = mockCallLog.map((e) => ({ ...e }));
   saveStore(seeded);
   return seeded;
@@ -45,8 +60,13 @@ function notify() {
 
 export const callLogAdapter = {
   // В APK читаем системный CallLog (там же лежат звонки с SIM). В браузере — моки.
-  async getEntries() {
-    const sys = await nativeBridge.getCallLog(200);
+  // silent: не поднимать диалог разрешений (нужно экрану входящего звонка —
+  // системный запрос поверх кнопок «Принять/Отклонить» недопустим). Если
+  // доступа нет, возвращаем null: «журнал недоступен» и «звонков не было» —
+  // разные состояния, и выдавать второе за первое нельзя.
+  async getEntries({ silent = false } = {}) {
+    const sys = await nativeBridge.getCallLog(200, { silent });
+    if (sys && sys.denied) return null;
     if (sys && Array.isArray(sys.entries)) {
       return sys.entries.map((e) => ({
         id: e.id,
@@ -62,11 +82,15 @@ export const callLogAdapter = {
     // поэтому демо-моки из localStorage показывать нельзя — иначе на телефоне
     // после переустановки вместо журнала звонков видны выдуманные номера.
     if (await nativeBridge.isAvailable()) return [];
+    // Плагин не отвечает, но мы всё равно в APK: это поломка моста, а не
+    // браузерный режим. Пустая история честнее выдуманной.
+    if (isNativeShell()) return [];
     return [...entries].sort((a, b) => b.timestamp - a.timestamp);
   },
 
-  async getEntriesForNumber(number) {
-    const all = await this.getEntries();
+  async getEntriesForNumber(number, opts) {
+    const all = await this.getEntries(opts);
+    if (all === null) return null;
     return all
       .filter((e) => numbersEqual(e.number || '', number))
       .sort((a, b) => b.timestamp - a.timestamp);

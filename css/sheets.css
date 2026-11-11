@@ -452,3 +452,53 @@
   background: var(--surface-2-pressed);
   transform: translateY(1px);
 }
+
+/* ===== История звонков на экране входящего =====
+   Занимает всё свободное место между SMS-ответами и кнопками приёма.
+   Список не прокручивается: лишние строки обрезаются снизу; строки,
+   не влезающие целиком, скрывает fitHistoryRows в call-screen.js. */
+.call-history {
+  position: relative;
+  width: 100%;
+  /* basis 0, а не auto: высота блока не должна зависеть от числа строк,
+     иначе после скрытия лишних строк контейнер «сжимается» и последняя
+     видимая строка оказывается обрезанной. */
+  flex: 1 1 0;
+  min-height: 0;
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow: hidden;
+}
+.call-history__row {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(180deg, var(--surface-1-top), var(--surface-1) 60%);
+  border-radius: var(--radius-row);
+  padding: 5px 12px;
+  box-shadow: var(--shadow-row);
+  min-height: 46px;
+}
+.call-history__row[hidden] { display: none; }
+.call-history__main {
+  flex: 1;
+  min-width: 0;
+}
+.call-history__type {
+  font-size: var(--fs-body);
+  color: #FFFFFF;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.call-history__empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: var(--fs-body);
+}

@@ -189,11 +189,11 @@ export const nativeBridge = {
     }
   },
 
-  async getCallLog(limit = 200) {
+  async getCallLog(limit = 200, { silent = false } = {}) {
     const p = getPlugin();
     if (!p) return null;
     try {
-      return await p.getCallLog({ limit });
+      return await p.getCallLog({ limit, silent });
     } catch (_) {
       return null;
     }
@@ -266,6 +266,24 @@ export const nativeBridge = {
     if (!p || typeof p.addListener !== 'function') return () => {};
     try {
       const handle = await p.addListener('telecomEvent', cb);
+      return () => {
+        try {
+          handle.remove();
+        } catch (_) { /* noop */ }
+      };
+    } catch (_) {
+      return () => {};
+    }
+  },
+
+  // Возврат приложения на передний план (нативный handleOnResume).
+  // Нужен, чтобы перечитать живое состояние звонка: пакета @capacitor/app
+  // в сборке нет, его событие 'resume' недоступно.
+  async onAppResume(cb) {
+    const p = getPlugin();
+    if (!p || typeof p.addListener !== 'function') return () => {};
+    try {
+      const handle = await p.addListener('appResume', cb);
       return () => {
         try {
           handle.remove();

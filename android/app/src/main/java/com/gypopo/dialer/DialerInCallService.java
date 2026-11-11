@@ -168,6 +168,12 @@ public class DialerInCallService extends InCallService {
         return null;
     }
 
+    // Живой звонок (входящий/исходящий/разговор) — для MainActivity: пока он
+    // есть, «назад» сворачивает приложение, а не уводит с экрана звонка.
+    static boolean hasLiveCall() {
+        return firstLiveCall() != null;
+    }
+
     private static Call ringingCall() {
         if (instance == null) return null;
         for (Call c : instance.calls) {
@@ -305,11 +311,13 @@ public class DialerInCallService extends InCallService {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setFullScreenIntent(openAppIntent(), true)
                 .setContentIntent(openAppIntent())
+                // Пока идёт вызов, плашку нельзя смахнуть: иначе из шторки
+                // не вернуться на экран приёма. Снимается при ответе/отбое.
+                .setOngoing(true)
                 .addAction(android.R.drawable.sym_action_call, "Принять",
                     actionIntent(DialerCallActionReceiver.ACTION_ANSWER, 2001))
                 .addAction(android.R.drawable.sym_call_missed, "Отклонить",
                     actionIntent(DialerCallActionReceiver.ACTION_DECLINE, 2002))
-                .setAutoCancel(true)
                 .build();
             postNotification(NOTIF_INCOMING, notif);
         } catch (Exception ignored) {

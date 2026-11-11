@@ -42,6 +42,9 @@ let state = {
   speakerOn: false,
   micMuted: false,
   startedAt: null,
+  // Момент начала входящего: по нему экран приёма отсекает текущий звонок
+  // из истории (в системный журнал запись попадает только после отбоя).
+  ringingAt: null,
 };
 
 function emit() {
@@ -106,6 +109,16 @@ export async function initNativeTelephony() {
   } catch (_) {
     // События недоступны — исходящие всё равно идут через placeCall.
   }
+  // Возврат в приложение (иконка, уведомление, переключение из другого
+  // приложения): перечитываем живое состояние. Без этого свёрнутый экран
+  // приёма не возвращался — открывался главный экран с клавиатурой.
+  try {
+    await nativeBridge.onAppResume(() => {
+      syncNativeCallState().catch(() => {});
+    });
+  } catch (_) {
+    // noop
+  }
   // WebView мог стартовать позже звонка (приложение убито/свёрнуто):
   // подтягиваем живое состояние, чтобы показать экран приёма/разговора.
   try {
@@ -124,7 +137,13 @@ export async function syncNativeCallState() {
   } catch (_) {
     return false;
   }
-  if (!snap || !snap.event || snap.event === 'other') return false;
+  if (!snap || !snap.event || snap.event === 'other') {
+    // Живого звонка нет. Если UI остался на состоянии входящего/разговора
+    // (WebView перезагрузился, звонок завершился в фоне) — гасим его,
+    // иначе висят кнопки «Принять/Отклонить» без вызова.
+    if (state.status !== 'idle') telephonyAdapter._reset();
+    return false;
+  }
   if (snap.event === 'disconnected' || snap.event === 'silenced') return false;
   await handleNativeEvent(snap);
   return true;
@@ -161,9 +180,16 @@ async function handleNativeEvent(e) {
         return;
       }
     } catch (_) { /* noop */ }
-    setState({ ...base, status: 'incoming-ringing', direction: 'incoming', startedAt: null });
+    setState({
+      ...base,
+      status: 'incoming-ringing',
+      direction: 'incoming',
+      startedAt: null,
+      // Повторное событие того же звонка не должно сдвигать отсечку истории.
+      ringingAt: (state.status === 'incoming-ringing' && state.number === number && state.ringingAt) || Date.now(),
+    });
   } else if (e.event === 'dialing') {
-    setState({ ...base, status: 'outgoing-ringing', direction: 'outgoing', startedAt: null });
+    setState({ ...base, status: 'outgoing-ringing', direction: 'outgoing', startedAt: null, ringingAt: null });
   } else if (e.event === 'active') {
     // startedAt не затираем: повторное событие не должно ронять таймер.
     setState({ ...base, status: 'active', direction: state.direction || 'outgoing', startedAt: state.startedAt || Date.now() });
@@ -217,6 +243,7 @@ export const telephonyAdapter = {
         speakerOn: false,
         micMuted: false,
         startedAt: null,
+        ringingAt: null,
       });
       return;
     }
@@ -229,6 +256,7 @@ export const telephonyAdapter = {
       speakerOn: false,
       micMuted: false,
       startedAt: null,
+      ringingAt: null,
     });
     // Симуляция взятия трубки собеседником через 2.5с — только для демо UX.
     this._simTimer = setTimeout(() => {
@@ -257,6 +285,7 @@ export const telephonyAdapter = {
       speakerOn: false,
       micMuted: false,
       startedAt: null,
+      ringingAt: Date.now(),
     });
   },
 
@@ -386,7 +415,7 @@ export const telephonyAdapter = {
     }
     setState({
       status: 'idle', direction: null, number: null, contactName: null, contactId: null,
-      photoUrl: null, speakerOn: false, micMuted: false, startedAt: null,
+      photoUrl: null, speakerOn: false, micMuted: false, startedAt: null, ringingAt: null,
     });
   },
 };

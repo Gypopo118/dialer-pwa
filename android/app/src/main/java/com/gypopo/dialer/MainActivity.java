@@ -35,11 +35,25 @@ public class MainActivity extends BridgeActivity {
         // Логика та же: слои интерфейса закрываем через историю WebView
         // (goBack -> popstate гасит экраны по одному, как стрелка «назад»
         // в шапке), и только на корневом экране сворачиваем приложение.
+        // Исключение — живой звонок: его экран не закрываем (см. ниже).
         // Параллельно хук через плагин App (@capacitor/app) НЕ подключаем:
         // его нет в сборке, а двойная обработка пропускала бы экраны.
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
+                // Живой звонок: экран приёма/разговора не закрываем и вызов
+                // не трогаем — сворачиваем приложение, как штатная звонилка.
+                // Повторное открытие (иконка/уведомление) вернёт на этот же
+                // экран; WebView и его история остаются нетронутыми.
+                if (DialerInCallService.hasLiveCall()) {
+                    Log.d(TAG, "callback: live call -> moveTaskToBack");
+                    try {
+                        moveTaskToBack(true);
+                    } catch (Exception ignored) {
+                        // Крайний фолбэк — дефолтное поведение диспетчера.
+                    }
+                    return;
+                }
                 try {
                     if (bridge != null && bridge.getWebView() != null && bridge.getWebView().canGoBack()) {
                         Log.d(TAG, "callback: canGoBack=true -> WebView.goBack()");

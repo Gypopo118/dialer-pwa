@@ -76,6 +76,16 @@ public class DialerTelecomPlugin extends Plugin {
         }
     }
 
+    // Возврат приложения на передний план. WebView перечитывает живое
+    // состояние звонка через getCurrentCall, чтобы экран приёма/разговора
+    // вернулся после сворачивания или тапа по уведомлению. Пакета
+    // @capacitor/app в сборке нет — используем штатный хук Capacitor.
+    @Override
+    protected void handleOnResume() {
+        super.handleOnResume();
+        emit("appResume", new JSObject());
+    }
+
     static void emit(String event, JSObject data) {
         DialerTelecomPlugin p = instance;
         if (p != null) {
@@ -680,6 +690,17 @@ public class DialerTelecomPlugin extends Plugin {
     @PluginMethod
     public void getCallLog(PluginCall call) {
         if (getPermissionState("callLog") != PermissionState.GRANTED) {
+            // Тихий режим (экран входящего звонка): не поднимаем диалог
+            // разрешений поверх кнопок «Принять/Отклонить». Сообщаем, что
+            // журнал недоступен, — UI скроет блок истории, а не покажет
+            // ложное «Новый звонок».
+            if (Boolean.TRUE.equals(call.getBoolean("silent", false))) {
+                JSObject ret = new JSObject();
+                ret.put("entries", new JSArray());
+                ret.put("denied", true);
+                call.resolve(ret);
+                return;
+            }
             requestPermissionForAliases(new String[]{"callLog"}, call, "onCallLogPerms");
             return;
         }

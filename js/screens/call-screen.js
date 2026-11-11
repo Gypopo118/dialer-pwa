@@ -1,10 +1,16 @@
 import { icons } from '../utils/icons.js';
 import { telephonyAdapter } from '../adapters/telephony-adapter.js';
-import { formatDuration, formatPhoneForDisplay } from '../utils/format.js';
+import { callLogAdapter } from '../adapters/call-log-adapter.js';
+import { formatDuration, formatPhoneForDisplay, formatRecentMeta } from '../utils/format.js';
 import { avatarHtml } from '../utils/photo-cache.js';
 import { pushLayer, popLayerSilently, registerOverlay } from '../utils/back-stack.js';
 
 const LAYER = 'call-screen';
+
+// Сколько последних звонков максимум готовим разметкой. Сколько реально
+// видно — решает высота свободного места: строки, не влезающие целиком,
+// скрываются (список на экране приёма не прокручивается).
+const MAX_HISTORY_ROWS = 7;
 
 // Быстрые SMS-ответы на входящий: сброс + моментальная отправка.
 const SMS_REPLIES = ['Привет, я перезвоню', 'Добрый день, я перезвоню'];
@@ -15,12 +21,16 @@ export function initCallScreen() {
   let isOpen = false;
   let padOpen = false;
   let lastState = telephonyAdapter.getState();
+  let historySeq = 0;
+  let historyObserver = null;
 
   telephonyAdapter.onStateChange((state) => render(state));
   registerOverlay({
     isOpen: () => isOpen,
     close: () => {
       // Как жест: сворачиваем UI звонка, сам звонок продолжается.
+      historySeq++;
+      disconnectHistoryObserver();
       root.classList.remove('call-screen--open');
       isOpen = false;
     },
@@ -35,6 +45,7 @@ export function initCallScreen() {
       return;
     }
     if (!isOpen) open();
+    disconnectHistoryObserver();
 
     const isIncoming = state.status === 'incoming-ringing';
     const isActive = state.status === 'active';
@@ -62,9 +73,10 @@ export function initCallScreen() {
         <button class="reply-btn" data-reply="0">Привет, я перезвоню</button>
         <button class="reply-btn" data-reply="1">Добрый день, я перезвоню</button>
       </div>
+      <div class="call-history" data-history></div>
       ` : ''}
       <div class="call-screen__timer" data-timer ${isActive ? '' : 'hidden'}>00:00</div>
-      <div class="call-screen__spacer"></div>
+      ${isIncoming ? '' : '<div class="call-screen__spacer"></div>'}
       ${isActive || state.status === 'outgoing-ringing' ? (padOpen ? `
         <div class="dtmf">
           <div class="dtmf-head">
@@ -126,6 +138,11 @@ export function initCallScreen() {
       btn.addEventListener('click', () => telephonyAdapter.playDtmf(btn.dataset.dtmf));
     });
 
+    if (isIncoming) {
+      const historyEl = root.querySelector('[data-history]');
+      if (historyEl) loadIncomingHistory(state, historyEl);
+    }
+
     if (isActive && !timerInterval) {
       timerInterval = setInterval(() => {
         const s = telephonyAdapter.getState();
@@ -133,6 +150,92 @@ export function initCallScreen() {
         const el = root.querySelector('[data-timer]');
         if (el) el.textContent = formatDuration(Math.floor((Date.now() - s.startedAt) / 1000));
       }, 1000);
+    }
+  }
+
+  // История звонков с номера, который сейчас звонит. Читаем без запроса
+  // разрешений (silent): системный диалог поверх кнопок приёма недопустим.
+  // null из адаптера = журнал недоступен — блок оставляем пустым, чтобы
+  // не соврать «Новый звонок».
+  async function loadIncomingHistory(state, container) {
+    const seq = ++historySeq;
+    let entries = null;
+    try {
+      entries = await callLogAdapter.getEntriesForNumber(state.number || '', { silent: true });
+    } catch (_) {
+      entries = null;
+    }
+    if (seq !== historySeq || !container.isConnected) return;
+    if (entries === null) return;
+
+    // Текущий звонок в системный журнал ещё не записан (запись появляется
+    // после отбоя), но отсекаем его и по времени начала — это страховка.
+    const cutoff = state.ringingAt ? state.ringingAt - 1000 : Infinity;
+    const rows = entries
+      .filter((e) => e.timestamp.getTime() < cutoff)
+      .slice(0, MAX_HISTORY_ROWS);
+
+    if (!rows.length) {
+      container.innerHTML = '<div class="call-history__empty">Новый звонок</div>';
+      return;
+    }
+
+    container.innerHTML = rows.map(historyRowTemplate).join('');
+    requestAnimationFrame(() => fitHistoryRows(container));
+    if (typeof ResizeObserver === 'function') {
+      historyObserver = new ResizeObserver(() => fitHistoryRows(container));
+      historyObserver.observe(container);
+    }
+  }
+
+  // Строка истории того же вида, что плашки на главном экране, но без
+  // аватара и кнопки вызова: номер и фото и так в шапке экрана приёма.
+  function historyRowTemplate(entry) {
+    const isFailedOut = entry.type === 'outgoing' && !(entry.durationSec > 0);
+    const arrow = (entry.type === 'incoming' || entry.type === 'missed') ? icons.arrowIn : icons.arrowOut;
+    const colorClass = `call-arrow--${entry.type === 'missed' ? 'missed' : entry.type === 'incoming' ? 'in' : (isFailedOut ? 'failed' : 'out')}`;
+    const typeLabel = {
+      outgoing: 'Исходящий',
+      incoming: 'Входящий',
+      missed: 'Пропущенный',
+    }[entry.type] || 'Звонок';
+    const meta = formatRecentMeta(entry.timestamp);
+
+    return `
+      <div class="call-history__row">
+        <div class="call-history__main">
+          <div class="call-history__type">${typeLabel}</div>
+          <div class="recent-sub">
+            <span class="call-arrow ${colorClass}">${arrow}</span>
+            <span class="clock-ico">${icons.clock}</span>
+            <span class="dur">${entry.durationSec > 0 ? formatDuration(entry.durationSec) : '—'}</span>
+          </div>
+        </div>
+        <div class="recent-time">
+          <span class="recent-time__day">${meta.top}</span>
+          <span class="recent-time__clock">${meta.bottom}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  // Показываем только строки, влезающие целиком: половина обрезанной
+  // плашки выглядит как баг. Вызывается после вставки и при изменении
+  // высоты (поворот/раскладка клавиатуры).
+  function fitHistoryRows(container) {
+    const rows = [...container.querySelectorAll('.call-history__row')];
+    if (!rows.length) return;
+    rows.forEach((row) => { row.hidden = false; });
+    const limit = container.clientHeight;
+    for (const row of rows) {
+      if (row.offsetTop + row.offsetHeight > limit) row.hidden = true;
+    }
+  }
+
+  function disconnectHistoryObserver() {
+    if (historyObserver) {
+      historyObserver.disconnect();
+      historyObserver = null;
     }
   }
 
@@ -144,6 +247,8 @@ export function initCallScreen() {
       // сворачиваем экран звонка, но сам звонок продолжается (как в Android:
       // сворачивание в шторку). Для прототипа — просто скрываем интерфейс,
       // сам мок-звонок остаётся активным до hangUp().
+      // В APK этот путь не используется: при живом звонке MainActivity
+      // сворачивает приложение, не трогая WebView (см. MainActivity.java).
       root.classList.remove('call-screen--open');
       isOpen = false;
     });
@@ -151,6 +256,8 @@ export function initCallScreen() {
 
   function close() {
     if (!isOpen) { cleanupTimer(); return; }
+    historySeq++;
+    disconnectHistoryObserver();
     root.classList.remove('call-screen--open');
     popLayerSilently(LAYER);
     isOpen = false;
