@@ -365,7 +365,8 @@
   min-height: 0;
   display: grid;
   grid-template-columns: 52px repeat(3, 1fr);
-  grid-template-rows: repeat(4, 1fr);
+  /* 4 ряда цифр + нижний ряд «вызов/поиск»: его высота равна клавише. */
+  grid-template-rows: repeat(5, 1fr);
   gap: 7px;
 }
 
@@ -421,24 +422,72 @@
 .key--side svg { width: 18px; height: 18px; }
 .key--side .digit { font-size: 17px; }
 
+/* Фильтр «только пропущенные»: белая стрелка, как у пропущенных строк
+   истории. Во включённом состоянии — белая обводка и мягкое свечение,
+   гаснущее от краёв к исходному серому в центре кнопки. */
+.key--filter {
+  color: #FFFFFF;
+  border: 1.5px solid transparent;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 200ms ease-out;
+}
+.key--filter::after {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, 0.32) 100%);
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.key--filter.is-active {
+  border-color: #FFFFFF;
+  box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.35), var(--shadow-key);
+}
+.key--filter.is-active::after { opacity: 1; }
+
+/* Нижний ряд: вызов — от левой колонки маленьких клавиш до правого края
+   клавиши 0, поиск — колонка #. Радиус и высота совпадают с клавишами. */
 .call-btn {
-  flex-shrink: 0;
-  height: 58px;
-  border-radius: var(--radius-pill);
-  /* Глубокий изумруд: почти незаметный свет сверху, без неона */
-  background: linear-gradient(180deg, #1FA36A 0%, #178052 100%);
+  grid-column: 1 / 4;
+  grid-row: 5;
+  border-radius: var(--radius-key);
+  /* Спокойный глубокий изумруд: один тон при пустом и заполненном поле */
+  background: linear-gradient(180deg, var(--call-btn-top) 0%, var(--call-btn) 100%);
   box-shadow: var(--shadow-call-btn);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #FFFFFF;
+  touch-action: manipulation;
 }
 .call-btn:active {
-  background: #146B46;
+  background: var(--call-btn-pressed);
   transform: translateY(1px);
 }
 .call-btn svg { width: 24px; height: 24px; }
+/* Пустое поле: кнопка не нажимается, но цвет и яркость не меняются —
+   трубка остаётся белой, как и цифры. */
 .call-btn[disabled] {
-  opacity: 0.35;
   pointer-events: none;
 }
+
+.search-btn {
+  grid-column: 4 / 5;
+  grid-row: 5;
+  border-radius: var(--radius-key);
+  background: linear-gradient(180deg, var(--search-btn-top) 0%, var(--search-btn) 100%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.16) inset,
+    0 6px 14px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  touch-action: manipulation;
+}
+.search-btn:active {
+  background: var(--search-btn-pressed);
+  transform: translateY(1px);
+}
+.search-btn svg { width: 24px; height: 24px; }

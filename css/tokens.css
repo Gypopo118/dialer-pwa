@@ -27,6 +27,13 @@
 
   --accent-call: #2FCE5C;
   --accent-call-pressed: #26A94B;
+  /* Нижние кнопки — спокойные глубокие тона, одинаковые по яркости */
+  --call-btn-top: #1B7A4B;
+  --call-btn: #187246;
+  --call-btn-pressed: #14603A;
+  --search-btn-top: #3068B8;
+  --search-btn: #2B5FA8;
+  --search-btn-pressed: #24508F;
   --danger: #FF453A;
 
   /* Радиусы */
@@ -62,6 +69,9 @@
 
   /* Компоновка */
   --dial-block-height: 48%; /* блок клавиатуры выше: клавиши ~+25% по высоте */
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-top: env(safe-area-inset-top, 0px);
+  /* Capacitor/SystemBars отдаёт реальные WindowInsets в этих CSS-переменных
+     (status bar, cutout, nav bar). env() остаётся запасным путём для PWA:
+     в Android WebView он обычно 0, из-за чего карточки уезжали под статус-бар. */
+  --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
 }

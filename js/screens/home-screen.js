@@ -10,7 +10,7 @@ import { nativeBridge } from '../adapters/native-bridge.js';
 import { formatPhoneForDisplay, formatDuration, formatRecentMeta, sanitizePhoneNumber, dialSearchKey, groupKeyForNumber } from '../utils/format.js';
 import { avatarHtml, warmPhotoCache, swapCachedPhotos } from '../utils/photo-cache.js';
 import { attachListScrollGesture } from '../utils/list-scroll-gesture.js';
-import { pushLayer, popLayerSilently, registerOverlay } from '../utils/back-stack.js';
+import { pushLayer, popLayerSilently, moveLayerToTop, replaceTopLayer, registerOverlay } from '../utils/back-stack.js';
 
 const KEYPAD_LAYOUT = [
   ['1', '2', '3'],
@@ -18,8 +18,9 @@ const KEYPAD_LAYOUT = [
   ['7', '8', '9'],
   ['*', '0', '#'],
 ];
-const SIDE_COL = ['search', 'paste', 'add-contact', 'contacts'];
+const SIDE_COL = ['missed', 'paste', 'add-contact', 'contacts'];
 const KEYBOARD_LAYER = 'keyboard';
+const MISSED_FILTER_LAYER = 'missed-filter';
 
 export function initHomeScreen({ contextMenu }) {
   const recentsEl = document.getElementById('recents');
@@ -62,6 +63,7 @@ export function initHomeScreen({ contextMenu }) {
     lastCallStatus = s.status;
   });
   let lastDialFilter = null;
+  let lastMissedFilter = false;
   uiStore.subscribe((state) => {
     syncDialInput(state.dialInput || '');
     dialInput.classList.toggle('dial-input--empty', !state.dialInput);
@@ -74,6 +76,18 @@ export function initHomeScreen({ contextMenu }) {
     if (state.dialInput !== lastDialFilter) {
       lastDialFilter = state.dialInput;
       onDialInputChanged(state.dialInput || '');
+    }
+    // Фильтр «только пропущенные»: перерисовываем историю и состояние
+    // кнопки. При снятии фильтра возвращаем подсказки контактов по тем
+    // цифрам, что уже набраны (при активном фильтре блок скрыт).
+    if (state.missedOnly !== lastMissedFilter) {
+      lastMissedFilter = state.missedOnly;
+      syncMissedFilterButton();
+      if (state.missedOnly) cancelContactsSearch();
+      renderRecents();
+      if (!state.missedOnly) {
+        scheduleContacts((state.dialInput || '').replace(/[^\d+]/g, ''));
+      }
     }
   });
   dialInput.value = uiStore.get().dialInput || '';
@@ -254,42 +268,107 @@ export function initHomeScreen({ contextMenu }) {
 
   // ===== Строка поиска =====
   // Dial-клавиатура на время поиска уходит под системную (не перекрывает
-  // экран) и возвращается при закрытии поиска. У поиска свой слой —
-  // «назад» сначала закрывает поиск, а не сворачивает приложение.
+  // экран). У поиска свой слой — «назад» закрывает поиск, а не приложение.
   const SEARCH_LAYER = 'search';
-  let searchHadKeyboard = false;
-  let searchHadPeek = false;
   document.getElementById('search-toggle').addEventListener('click', () => {
     if (uiStore.get().searchOpen) return;
     uiStore.set({ searchOpen: true });
-    searchHadKeyboard = uiStore.get().keyboardVisible;
-    searchHadPeek = !keyboardPeek.hidden && !searchHadKeyboard;
-    hideKeyboard();
+    // Dial-клавиатура прячется, её слой атомарно меняется на слой поиска.
+    // replaceTopLayer не делает history.back() + pushState, поэтому здесь
+    // нет гонки между асинхронным popstate и новой записью истории.
+    if (keyboardWasPushed) {
+      if (replaceTopLayer(KEYBOARD_LAYER, SEARCH_LAYER, () => closeSearch(true))) {
+        keyboardWasPushed = false;
+      }
+    } else {
+      pushLayer(SEARCH_LAYER, () => closeSearch(true));
+    }
+    uiStore.set({ keyboardVisible: false });
+    dialBlock.classList.add('dial-block--hidden');
     keyboardPeek.hidden = true;
     searchBar.hidden = false;
-    pushLayer(SEARCH_LAYER, () => closeSearch(true));
     searchInput.focus();
   });
   searchInput.addEventListener('input', () => {
     uiStore.set({ searchQuery: searchInput.value });
     scheduleRender(150);
   });
-  document.getElementById('search-close').addEventListener('click', closeSearch);
+  document.getElementById('search-close').addEventListener('click', () => closeSearch(false));
   registerOverlay({ isOpen: () => uiStore.get().searchOpen, close: () => closeSearch(true) });
+
+  // Крестик и системный «назад» работают одинаково: очищают запрос,
+  // закрывают поиск вместе с системной клавиатурой и сразу возвращают
+  // на главный экран с номеронабирателем.
   function closeSearch(viaGesture) {
     if (!uiStore.get().searchOpen) return;
     uiStore.set({ searchOpen: false, searchQuery: '' });
     searchInput.value = '';
     searchBar.hidden = true;
-    if (!viaGesture) popLayerSilently(SEARCH_LAYER);
+    // Состояние уже снято — скрытие IME ниже не сочтётся вторым «назад».
+    searchInput.blur();
     renderRecents();
-    if (searchHadKeyboard) {
-      searchHadKeyboard = false;
-      showKeyboard();
+    if (viaGesture) {
+      // Жест «назад» уже снял слой поиска через popstate.
+      if (keyboardWasPushed) revealKeyboard();
+      else showKeyboard();
+    } else if (keyboardWasPushed) {
+      // Слой клавиатуры уже лежит ниже (поиск был единственным сверху):
+      // убираем слой поиска и показываем клавиатуру. Пуш сразу после
+      // history.back() не делаем — гонки popstate и pushState нет.
+      popLayerSilently(SEARCH_LAYER);
+      revealKeyboard();
     } else {
-      keyboardPeek.hidden = !searchHadPeek;
+      // Клавиатурного слоя нет — атомарно меняем слой поиска на клавиатуру.
+      replaceTopLayer(SEARCH_LAYER, KEYBOARD_LAYER, () => hideKeyboard());
+      keyboardWasPushed = true;
+      revealKeyboard();
+    }
+    // Если включён фильтр пропущенных, его слой должен остаться верхним:
+    // следующий «назад» снимает фильтр, а не прячет клавиатуру.
+    if (uiStore.get().missedOnly) moveLayerToTop(MISSED_FILTER_LAYER);
+  }
+
+  // Android-клавиатура (IME) забирает первый жест «назад» себе — прячет
+  // себя и только потом отдаёт событие приложению. В поиске этот жест
+  // должен закрывать поиск сразу, поэтому натив сообщает о скрытии IME
+  // (MainActivity.watchImeDismiss), а мы завершаем закрытие тем же жестом.
+  window.addEventListener('dialer:ime-hidden', () => {
+    if (!uiStore.get().searchOpen) return;
+    // Приложение свёрнуто (или фокус уже ушёл с поля) — клавиатуру скрыли
+    // не жестом «назад», поиск не трогаем.
+    if (document.visibilityState !== 'visible') return;
+    if (document.activeElement !== searchInput) return;
+    closeSearch(false);
+  });
+
+  // ===== Фильтр «только пропущенные» =====
+  // Кнопка в левом верхнем углу клавиатуры (на месте прежней лупы).
+  // Пока фильтр включён, в стеке «назад» лежит его слой: первый жест
+  // снимает фильтр, а не сворачивает приложение.
+  function toggleMissedFilter() {
+    setMissedFilter(!uiStore.get().missedOnly);
+  }
+
+  function setMissedFilter(on) {
+    if (uiStore.get().missedOnly === on) return;
+    if (on) {
+      uiStore.set({ missedOnly: true });
+      pushLayer(MISSED_FILTER_LAYER, () => setMissedFilter(false));
+    } else {
+      uiStore.set({ missedOnly: false });
+      popLayerSilently(MISSED_FILTER_LAYER);
     }
   }
+
+  function syncMissedFilterButton() {
+    const key = keypadEl.querySelector('.key--filter');
+    if (!key) return;
+    const on = !!uiStore.get().missedOnly;
+    key.classList.toggle('is-active', on);
+    key.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
+  registerOverlay({ isOpen: () => uiStore.get().missedOnly, close: () => setMissedFilter(false) });
 
   // ===== Поле ввода =====
   // Удаление идёт в позиции курсора (или выделенного фрагмента),
@@ -332,10 +411,15 @@ export function initHomeScreen({ contextMenu }) {
   function buildKeypad() {
     keypadEl.innerHTML = '';
     KEYPAD_LAYOUT.forEach((row, rowIdx) => {
+      const sideName = SIDE_COL[rowIdx];
       const sideKey = document.createElement('button');
-      sideKey.className = 'key key--side';
-      sideKey.dataset.side = SIDE_COL[rowIdx];
-      sideKey.innerHTML = sideIconFor(SIDE_COL[rowIdx]);
+      sideKey.className = 'key key--side' + (sideName === 'missed' ? ' key--filter' : '');
+      sideKey.dataset.side = sideName;
+      sideKey.innerHTML = sideIconFor(sideName);
+      if (sideName === 'missed') {
+        sideKey.setAttribute('aria-label', 'Пропущенные вызовы');
+        sideKey.setAttribute('aria-pressed', 'false');
+      }
       keypadEl.appendChild(sideKey);
 
       row.forEach((digit) => {
@@ -422,9 +506,20 @@ export function initHomeScreen({ contextMenu }) {
       key.addEventListener('pointerleave', unlit, { passive: true });
     });
 
-    keypadEl.querySelector('[data-side="search"]').addEventListener('click', () => {
+    // Нижний ряд — часть той же сетки: вызов на две цифровые колонки
+    // (* и 0), поиск — строго под #. Высота ряда равна высоте клавиши.
+    keypadEl.appendChild(callBtn);
+
+    const searchKey = document.createElement('button');
+    searchKey.className = 'search-btn';
+    searchKey.setAttribute('aria-label', 'Поиск');
+    searchKey.innerHTML = icons.search;
+    searchKey.addEventListener('click', () => {
       document.getElementById('search-toggle').click();
     });
+    keypadEl.appendChild(searchKey);
+
+    keypadEl.querySelector('[data-side="missed"]').addEventListener('click', toggleMissedFilter);
     keypadEl.querySelector('[data-side="paste"]').addEventListener('click', pasteFromClipboard);
     keypadEl.querySelector('[data-side="add-contact"]').addEventListener('click', () => {
       window.dispatchEvent(new CustomEvent('dialer:add-contact-blank'));
@@ -432,6 +527,8 @@ export function initHomeScreen({ contextMenu }) {
     keypadEl.querySelector('[data-side="contacts"]').addEventListener('click', () => {
       window.dispatchEvent(new CustomEvent('dialer:open-contacts'));
     });
+
+    syncMissedFilterButton();
   }
 
   // Вставка номера из буфера обмена: чистим скобки/пробелы/дефисы,
@@ -475,7 +572,7 @@ export function initHomeScreen({ contextMenu }) {
   }
 
   function sideIconFor(name) {
-    if (name === 'search') return icons.search;
+    if (name === 'missed') return icons.arrowIn;
     if (name === 'paste') return icons.paste;
     if (name === 'add-contact') return icons.addContact;
     if (name === 'contacts') return icons.contacts;
@@ -501,11 +598,16 @@ export function initHomeScreen({ contextMenu }) {
     keyboardPeek.hidden = false;
     if (keyboardWasPushed) { popLayerSilently(KEYBOARD_LAYER); keyboardWasPushed = false; }
   }
-  function showKeyboard() {
-    if (uiStore.get().keyboardVisible) return;
+  // Показать dial-клавиатуру без работы со стеком «назад»: слой клавиатуры
+  // уже лежит ниже (возврат из поиска) или будет поставлен вызывающим.
+  function revealKeyboard() {
     uiStore.set({ keyboardVisible: true });
     dialBlock.classList.remove('dial-block--hidden');
     keyboardPeek.hidden = true;
+  }
+  function showKeyboard() {
+    if (uiStore.get().keyboardVisible) return;
+    revealKeyboard();
     pushLayer(KEYBOARD_LAYER, () => hideKeyboard());
     keyboardWasPushed = true;
   }
@@ -546,6 +648,8 @@ export function initHomeScreen({ contextMenu }) {
   function scheduleContacts(digits) {
     if (contactsTimer) { clearTimeout(contactsTimer); contactsTimer = null; }
     const seq = ++contactsSeq;
+    // Фильтр пропущенных не показывает контакты: у них нет статуса звонка.
+    if (uiStore.get().missedOnly) { renderContactsBlock([]); return; }
     if (!digits) { renderContactsBlock([]); return; }
     contactsTimer = setTimeout(async () => {
       contactsTimer = null;
@@ -561,6 +665,13 @@ export function initHomeScreen({ contextMenu }) {
       if (cur !== digits) return; // номер уже изменился
       renderContactsBlock(filterContactMatches(found, digits));
     }, 250);
+  }
+
+  // Отменяет и текущий дебаунс, и уже запущенный поиск контактов:
+  // результат в полёте не должен вернуть блок контактов поверх фильтра.
+  function cancelContactsSearch() {
+    contactsSeq++;
+    if (contactsTimer) { clearTimeout(contactsTimer); contactsTimer = null; }
   }
 
   // Контакт уже виден в истории (в любом написании) — не дублируем.
@@ -661,12 +772,14 @@ export function initHomeScreen({ contextMenu }) {
   }
 
   function syncEmptyState() {
-    const { searchOpen, searchQuery } = uiStore.get();
+    const { searchOpen, searchQuery, missedOnly } = uiStore.get();
     const dkey = dialSearchKey((uiStore.get().dialInput || '').replace(/[^\d+]/g, ''));
     const hasContacts = !contactsEl.hidden && contactsEl.childElementCount > 0;
     if (visibleRowCount === 0 && !hasContacts) {
       const filtered = (searchOpen && (searchQuery || '').trim()) || dkey;
-      emptyEl.textContent = filtered ? 'Ничего не найдено' : 'Пока нет истории звонков';
+      emptyEl.textContent = filtered
+        ? 'Ничего не найдено'
+        : (missedOnly ? 'Нет пропущенных звонков' : 'Пока нет истории звонков');
       emptyEl.hidden = false;
     } else {
       emptyEl.hidden = true;
@@ -696,7 +809,7 @@ export function initHomeScreen({ contextMenu }) {
   // Поиск и refresh: единственные пути полной отрисовки. Набор сюда не ходит.
   async function renderRecents() {
     const seq = ++renderSeq;
-    const { searchQuery, searchOpen, dialInput: dial } = uiStore.get();
+    const { searchQuery, searchOpen, dialInput: dial, missedOnly } = uiStore.get();
     const q = (searchQuery || '').trim();
     const dkey = dialSearchKey((dial || '').replace(/[^\d+]/g, ''));
 
@@ -704,9 +817,20 @@ export function initHomeScreen({ contextMenu }) {
     // список строк сужается сразу (поиск матчит и имена, и номера).
     let rows = allRows;
     if (searchOpen && q) rows = filterRecents(allRows, q);
+    // Строки с красной стрелкой — те, у которых последний звонок пропущен.
+    if (missedOnly) rows = rows.filter((r) => r.lastType === 'missed');
 
     renderHistory(rows);
     applyDialFilter(dkey);
+
+    // В режиме «только пропущенные» подсказки контактов не нужны: у них
+    // нет статуса звонка, и в список они бы попали без красной стрелки.
+    if (missedOnly) {
+      cancelContactsSearch();
+      renderContactsBlock([]);
+      afterRenderPhotos(rows, []);
+      return;
+    }
 
     if (!searchOpen || !q) {
       if (!dkey) {

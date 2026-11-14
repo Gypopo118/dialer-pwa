@@ -17,11 +17,15 @@
 //     локальный fallback.
 // ============================================================================
 
-import { mockContacts } from '../mock-data.js';
 import { nativeBridge } from './native-bridge.js';
 import { dialSearchKey, maskNumber, normalizeNumber, normalizeText, numbersEqual } from '../utils/format.js';
 
 const STORAGE_KEY = 'dialer.contacts.v1';
+
+// id демо-контактов из первых сборок (c1…c5). Заглушку убрали, но у тех, кто
+// обновляет приложение поверх старой версии, «Марина Волкова» и другие могли
+// остаться в localStorage — вычищаем их при загрузке.
+const LEGACY_DEMO_IDS = new Set(['c1', 'c2', 'c3', 'c4', 'c5']);
 
 function loadStore() {
   let initial = null;
@@ -29,16 +33,14 @@ function loadStore() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) initial = JSON.parse(raw);
   } catch (e) { /* игнорируем повреждённое хранилище */ }
-  if (!initial) {
-    const seeded = mockContacts.map((c) => ({ ...c }));
-    saveStore(seeded);
-    return seeded;
-  }
+  if (!Array.isArray(initial)) return [];
+  const withoutDemo = initial.filter((c) => !LEGACY_DEMO_IDS.has(String((c && c.id) || '')));
+  if (withoutDemo.length !== initial.length) saveStore(withoutDemo);
   // Разовая чистка старых дублей: один номер — один контакт, первый выигрывает.
   const seen = [];
   const clean = [];
   let changed = false;
-  for (const c of initial) {
+  for (const c of withoutDemo) {
     const nums = (c.numbers || []).map((n) => (n || '').replace(/[^\d+]/g, '')).filter(Boolean);
     if (nums.length && nums.every((n) => seen.some((k) => numbersEqual(k, n)))) {
       changed = true;

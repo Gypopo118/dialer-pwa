@@ -4,14 +4,18 @@ import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.webkit.WebView;
 
 import androidx.activity.OnBackPressedCallback;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
     // Тег для проверки в Logcat: adb logcat -s DialerBack
     private static final String TAG = "DialerBack";
+    private boolean imeWasVisible = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -23,6 +27,7 @@ public class MainActivity extends BridgeActivity {
             setShowWhenLocked(true);
             setTurnScreenOn(true);
         }
+        watchImeDismiss();
         // Номер из меню «Открыть с помощью» (tel:-intent из браузера).
         // Холодный старт: WebView ещё не загружен, слушать событие некому —
         // номер складывается в pending внутри плагина, JS заберёт его
@@ -87,6 +92,25 @@ public class MainActivity extends BridgeActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         handleDialIntent(intent);
+    }
+
+    // Клавиатура Android (IME) забирает первый жест «назад» себе: сначала
+    // прячется она, и только следующий жест доходит до onBackPressed.
+    // В режиме поиска это давало два нажатия вместо одного, поэтому ловим
+    // скрытие IME по insets и сообщаем JS: если открыт поиск, он закроется
+    // тем же жестом (см. home-screen.js, событие 'dialer:ime-hidden').
+    private void watchImeDismiss() {
+        if (bridge == null || bridge.getWebView() == null) return;
+        final WebView webView = bridge.getWebView();
+        ViewCompat.setOnApplyWindowInsetsListener(webView, (v, insets) -> {
+            boolean imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime());
+            if (imeWasVisible && !imeVisible) {
+                v.post(() -> webView.evaluateJavascript(
+                    "window.dispatchEvent(new CustomEvent('dialer:ime-hidden'))", null));
+            }
+            imeWasVisible = imeVisible;
+            return insets;
+        });
     }
 
     private void handleDialIntent(Intent intent) {
