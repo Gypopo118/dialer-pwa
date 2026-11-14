@@ -27,6 +27,10 @@
 
   --accent-call: #2FCE5C;
   --accent-call-pressed: #26A94B;
+  /* Кнопка поиска (синяя) в нижнем ряду клавиатуры */
+  --search-btn-top: #5A9CFF;
+  --search-btn: #3D8BFD;
+  --search-btn-pressed: #2F6FD6;
   --danger: #FF453A;
 
   /* Радиусы */

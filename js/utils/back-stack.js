@@ -102,6 +102,17 @@ export function popLayerSilently(name) {
   history.back();
 }
 
+// Поднимает уже существующий слой наверх стека без изменения history.
+// Нужно, когда поверх слоя открыли и закрыли другой экран (например,
+// клавиатура после поиска оказалась над фильтром): порядок в массиве —
+// это приоритет «назад», а глубина history (число записей) не меняется.
+export function moveLayerToTop(name) {
+  const idx = stack.findIndex((l) => l.name === name);
+  if (idx === -1 || idx === stack.length - 1) return;
+  const [layer] = stack.splice(idx, 1);
+  stack.push(layer);
+}
+
 // Атомарная замена верхнего слоя без history.back — для перехода
 // «меню → история». Старая схема (close меню через history.back + тут же
 // pushState истории) уходила в гонку: back асинхронен, pushState стрелял

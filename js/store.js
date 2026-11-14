@@ -23,6 +23,7 @@ export const uiStore = createStore({
   keyboardVisible: true,
   searchOpen: false,
   searchQuery: '',
+  missedOnly: false, // фильтр «только пропущенные» на главном экране
   contextMenuFor: null, // id группированной строки истории
   screen: 'home', // 'home' | 'contact-history'
   contactHistoryFor: null, // number
