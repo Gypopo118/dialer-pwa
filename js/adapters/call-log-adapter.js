@@ -14,12 +14,16 @@
 //     ContentObserver для CallLog.Calls.CONTENT_URI и дергать callback.
 // ============================================================================
 
-import { mockCallLog } from '../mock-data.js';
 import { nativeBridge } from './native-bridge.js';
 import { numbersEqual, groupKeyForNumber } from '../utils/format.js';
 
 const STORAGE_KEY = 'dialer.calllog.v1';
 const listeners = new Set();
+
+// id демо-записей из первых сборок (l1…l9). Заглушку убрали, но у тех, кто
+// обновляет приложение поверх старой версии, записи могли остаться в
+// localStorage — вычищаем их при загрузке.
+const LEGACY_DEMO_ID = /^l\d+$/;
 
 // Нативная оболочка (APK). Проверка синхронная: window.Capacitor
 // инжектируется до наших скриптов.
@@ -33,17 +37,17 @@ function isNativeShell() {
 }
 
 function loadStore() {
+  let parsed = [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw).map((e) => ({ ...e, timestamp: new Date(e.timestamp) }));
+    if (raw) parsed = JSON.parse(raw);
   } catch (e) { /* игнорируем повреждённое хранилище */ }
-  // В APK демо-журнал не заводим даже в localStorage: единственный источник
-  // истории там — системный CallLog.Calls. После переустановки на телефоне
-  // не должно появиться ни одной выдуманной строки.
-  if (isNativeShell()) return [];
-  const seeded = mockCallLog.map((e) => ({ ...e }));
-  saveStore(seeded);
-  return seeded;
+  if (!Array.isArray(parsed)) return [];
+  const cleaned = parsed.filter((e) => !LEGACY_DEMO_ID.test(String((e && e.id) || '')));
+  if (cleaned.length !== parsed.length) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned)); } catch (_) { /* noop */ }
+  }
+  return cleaned.map((e) => ({ ...e, timestamp: new Date(e.timestamp) }));
 }
 
 function saveStore(list) {
