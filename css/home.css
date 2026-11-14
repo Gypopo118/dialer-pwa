@@ -452,8 +452,8 @@
   grid-column: 1 / 4;
   grid-row: 5;
   border-radius: var(--radius-key);
-  /* Глубокий изумруд: почти незаметный свет сверху, без неона */
-  background: linear-gradient(180deg, #1FA36A 0%, #178052 100%);
+  /* Спокойный глубокий изумруд: один тон при пустом и заполненном поле */
+  background: linear-gradient(180deg, var(--call-btn-top) 0%, var(--call-btn) 100%);
   box-shadow: var(--shadow-call-btn);
   display: flex;
   align-items: center;
@@ -462,12 +462,13 @@
   touch-action: manipulation;
 }
 .call-btn:active {
-  background: #146B46;
+  background: var(--call-btn-pressed);
   transform: translateY(1px);
 }
 .call-btn svg { width: 24px; height: 24px; }
+/* Пустое поле: кнопка не нажимается, но цвет и яркость не меняются —
+   трубка остаётся белой, как и цифры. */
 .call-btn[disabled] {
-  opacity: 0.35;
   pointer-events: none;
 }
 
