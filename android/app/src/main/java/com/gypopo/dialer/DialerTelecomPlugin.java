@@ -19,6 +19,7 @@ import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
+import android.telephony.TelephonyManager;
 import android.view.HapticFeedbackConstants;
 
 import androidx.activity.result.ActivityResult;
@@ -277,21 +278,63 @@ public class DialerTelecomPlugin extends Plugin {
     }
 
     // PhoneAccountHandle из токена, который вернул getSims(). Если токена нет,
-    // пробуем subscriptionId (он не слот-индекс и однозначно указывает карту),
-    // и только потом оставляем выбор системе.
+    // ищем call-capable аккаунт по subscriptionId (он не слот-индекс и
+    // однозначно указывает карту), и только потом оставляем выбор системе.
     private PhoneAccountHandle resolveSelectedHandle(PluginCall call, TelecomManager tm) {
         PhoneAccountHandle handle = decodePhoneAccount(call.getString("phoneAccountId"));
         if (handle == null) {
             Integer subId = call.getInt("subscriptionId");
             if (subId != null && subId >= 0) {
-                try {
-                    handle = tm.getPhoneAccountHandleForSubscriptionId(subId);
-                } catch (Exception ignored) {
-                    // нет доступа/аккаунта — звонок уйдёт через SIM по умолчанию
-                }
+                handle = findHandleForSubscription(tm, subId);
             }
         }
         return handle;
+    }
+
+    // Сопоставление SIM и телефонного аккаунта. Публичного
+    // TelecomManager.getPhoneAccountHandleForSubscriptionId нет, поэтому:
+    //  - API 30+: TelephonyManager.getSubscriptionId(handle) — официальный путь;
+    //  - API 24–29: у телефонных аккаунтов id совпадает с subscriptionId
+    //    (SIP-аккаунты с нечисловым id для SIM не подходят).
+    private PhoneAccountHandle findHandleForSubscription(TelecomManager tm, int subscriptionId) {
+        if (tm == null || subscriptionId < 0) return null;
+        try {
+            List<PhoneAccountHandle> accounts = tm.getCallCapablePhoneAccounts();
+            if (accounts == null) return null;
+            TelephonyManager telephony = null;
+            try {
+                telephony = (TelephonyManager) getContext().getSystemService(Context.TELEPHONY_SERVICE);
+            } catch (Exception ignored) {
+                // без сервиса останется фолбэк по id
+            }
+            for (PhoneAccountHandle handle : accounts) {
+                if (subIdForHandle(telephony, handle) == subscriptionId) return handle;
+            }
+        } catch (Exception ignored) {
+            // нет READ_PHONE_STATE или провайдер недоступен
+        }
+        return null;
+    }
+
+    private int subIdForHandle(TelephonyManager telephony, PhoneAccountHandle handle) {
+        if (handle == null) return SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                if (telephony != null) {
+                    int subId = telephony.getSubscriptionId(handle);
+                    if (subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) return subId;
+                }
+            } catch (Exception ignored) {
+                // SecurityException/UnsupportedOperation — пробуем по id
+            }
+        }
+        try {
+            String id = handle.getId();
+            if (id != null && id.matches("\\d+")) return Integer.parseInt(id);
+        } catch (Exception ignored) {
+            // нечисловой id — не SIM-аккаунт
+        }
+        return SubscriptionManager.INVALID_SUBSCRIPTION_ID;
     }
 
     // ---------- SIM cards ----------
@@ -349,15 +392,6 @@ public class DialerTelecomPlugin extends Plugin {
             List<SubscriptionInfo> sorted = new ArrayList<>(infos);
             Collections.sort(sorted, (a, b) -> Integer.compare(a.getSimSlotIndex(), b.getSimSlotIndex()));
 
-            List<PhoneAccountHandle> callAccounts = null;
-            if (tm != null) {
-                try {
-                    callAccounts = tm.getCallCapablePhoneAccounts();
-                } catch (Exception ignored) {
-                    // без READ_PHONE_STATE провайдер может не отдать аккаунты
-                }
-            }
-
             for (SubscriptionInfo info : sorted) {
                 if (info == null || info.getSimSlotIndex() < 0) continue;
                 JSObject o = new JSObject();
@@ -365,19 +399,8 @@ public class DialerTelecomPlugin extends Plugin {
                 o.put("slotIndex", info.getSimSlotIndex());
                 o.put("name", pickSimName(info));
 
-                PhoneAccountHandle handle = null;
-                if (tm != null) {
-                    try {
-                        handle = tm.getPhoneAccountHandleForSubscriptionId(info.getSubscriptionId());
-                    } catch (Exception ignored) {
-                        // оставляем без handle — звонок уйдёт по выбору системы
-                    }
-                }
-                // Если Telecom вернул список call-capable аккаунтов, а нашего
-                // handle в нём нет — не подсовываем его в placeCall.
-                if (handle != null && callAccounts != null && !callAccounts.isEmpty() && !callAccounts.contains(handle)) {
-                    handle = null;
-                }
+                // Аккаунт берём только из call-capable списка Telecom.
+                PhoneAccountHandle handle = findHandleForSubscription(tm, info.getSubscriptionId());
                 if (handle != null) {
                     String encoded = encodePhoneAccount(handle);
                     if (encoded != null) o.put("phoneAccountId", encoded);
