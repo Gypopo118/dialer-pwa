@@ -292,7 +292,9 @@
   font-weight: 400;
   letter-spacing: 1px;
   color: var(--text-primary);
-  caret-color: var(--accent-call);
+  /* В поле рисуется своя белая каретка .dial-caret. Нативную скрываем:
+     иначе из-под белой выглядывает её зелёная полоска (caret-color). */
+  caret-color: transparent;
   user-select: text;
   -webkit-user-select: text;
 }
