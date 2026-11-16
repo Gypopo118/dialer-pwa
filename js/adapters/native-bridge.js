@@ -59,8 +59,8 @@ export const nativeBridge = {
     return p.requestDefaultDialerRole();
   },
 
-  async placeCall(number) {
-    return getPlugin().placeCall({ number });
+  async placeCall(number, { phoneAccountId = '', subscriptionId = -1 } = {}) {
+    return getPlugin().placeCall({ number, phoneAccountId, subscriptionId });
   },
 
   async answerCall() {
@@ -194,6 +194,66 @@ export const nativeBridge = {
     if (!p) return null;
     try {
       return await p.getCallLog({ limit, silent });
+    } catch (_) {
+      return null;
+    }
+  },
+
+  // Активные SIM (APK): имя оператора, слот и токен PhoneAccountHandle.
+  // silent=true не поднимает диалог разрешений (фоновое обновление).
+  async getSims({ silent = false } = {}) {
+    const p = getPlugin();
+    if (!p) return { sims: [] };
+    try {
+      return await p.getSims({ silent });
+    } catch (_) {
+      return { sims: [] };
+    }
+  },
+
+  // Последняя выбранная SIM (SharedPreferences в APK).
+  async getSelectedSim() {
+    const p = getPlugin();
+    if (!p) return null;
+    try {
+      return await p.getSelectedSim();
+    } catch (_) {
+      return null;
+    }
+  },
+
+  async setSelectedSim(subscriptionId) {
+    const p = getPlugin();
+    if (!p) return null;
+    try {
+      return await p.setSelectedSim({ subscriptionId });
+    } catch (_) {
+      return null;
+    }
+  },
+
+  // Смена SIM в системе (лоток, настройки, включение/отключение карты).
+  async onSimsChanged(cb) {
+    const p = getPlugin();
+    if (!p || typeof p.addListener !== 'function') return () => {};
+    try {
+      const handle = await p.addListener('simsChanged', cb);
+      return () => {
+        try {
+          handle.remove();
+        } catch (_) { /* noop */ }
+      };
+    } catch (_) {
+      return () => {};
+    }
+  },
+
+  // Системный лёгкий тактильный щелчок (CLOCK_TICK) в APK.
+  async hapticTick() {
+    const p = getPlugin();
+    if (!p) return null;
+    try {
+      return await p.hapticTick();
     } catch (_) {
       return null;
     }

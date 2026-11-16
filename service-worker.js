@@ -3,7 +3,7 @@
 // контейнер грузит файлы локально), но остаётся нужен, если приложение
 // также публикуется как обычный PWA/TWA.
 
-const CACHE_NAME = 'dialer-shell-v9';
+const CACHE_NAME = 'dialer-shell-v10';
 const SHELL_FILES = [
   './',
   './index.html',
@@ -18,6 +18,7 @@ const SHELL_FILES = [
   './js/recents-model.js',
   './js/adapters/contacts-adapter.js',
   './js/adapters/call-log-adapter.js',
+  './js/adapters/sims-adapter.js',
   './js/adapters/telephony-adapter.js',
   './js/adapters/native-bridge.js',
   './js/screens/home-screen.js',
@@ -26,6 +27,7 @@ const SHELL_FILES = [
   './js/screens/call-screen.js',
   './js/components/context-menu.js',
   './js/components/contact-form.js',
+  './js/components/sim-call-button.js',
   './js/utils/format.js',
   './js/utils/icons.js',
   './js/utils/photo-cache.js',

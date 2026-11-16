@@ -7,7 +7,8 @@ import { contactsAdapter } from '../adapters/contacts-adapter.js';
 import { callLogAdapter } from '../adapters/call-log-adapter.js';
 import { telephonyAdapter } from '../adapters/telephony-adapter.js';
 import { nativeBridge } from '../adapters/native-bridge.js';
-import { formatPhoneForDisplay, formatDuration, formatRecentMeta, sanitizePhoneNumber, dialSearchKey, groupKeyForNumber } from '../utils/format.js';
+import { createSimCallButton } from '../components/sim-call-button.js';
+import { formatPhoneForDisplay, formatDuration, formatRecentMeta, sanitizePhoneNumber, sanitizeDialString, dialSearchKey, groupKeyForNumber } from '../utils/format.js';
 import { avatarHtml, warmPhotoCache, swapCachedPhotos } from '../utils/photo-cache.js';
 import { attachListScrollGesture } from '../utils/list-scroll-gesture.js';
 import { pushLayer, popLayerSilently, moveLayerToTop, replaceTopLayer, registerOverlay } from '../utils/back-stack.js';
@@ -37,11 +38,18 @@ export function initHomeScreen({ contextMenu }) {
   let keyboardWasPushed = false;
 
   backspaceBtn.innerHTML = icons.backspace;
-  callBtn.innerHTML = icons.phone;
   document.getElementById('search-icon').innerHTML = icons.search;
   document.getElementById('search-close').innerHTML = icons.close;
 
   buildKeypad();
+  // Умная капсула вызова: одна SIM — обычная кнопка, две — карусель
+  // с переключением карты свайпом (см. components/sim-call-button.js).
+  const callCapsule = createSimCallButton({
+    button: callBtn,
+    isEnabled: () => !!uiStore.get().dialInput,
+    onCall: (sim) => placeCallWithSim(sim),
+  });
+  callCapsule.setEnabled(!!uiStore.get().dialInput);
   attachListScrollGesture(recentsEl, { onAutoHide: hideKeyboard });
 
   // Клавиатура по умолчанию открыта — регистрируем это как слой стека
@@ -68,7 +76,7 @@ export function initHomeScreen({ contextMenu }) {
     syncDialInput(state.dialInput || '');
     dialInput.classList.toggle('dial-input--empty', !state.dialInput);
     backspaceBtn.hidden = !state.dialInput;
-    callBtn.toggleAttribute('disabled', !state.dialInput);
+    callCapsule.setEnabled(!!state.dialInput);
     // Набранные цифры вживую фильтруют историю (smart dial), но список
     // не пересобирается: строки уже в DOM, фильтр только скрывает/показывает
     // их. Применяем следующим кадром — цифра успевает отрисоваться раньше
@@ -390,16 +398,17 @@ export function initHomeScreen({ contextMenu }) {
   }, { passive: true });
   backspaceBtn.addEventListener('touchend', () => clearTimeout(bsTimer));
 
-  callBtn.addEventListener('click', async () => {
+  // Исходящий звонок с выбранной SIM. Валидация номера и USSD-логика
+  // прежние: sanitizeDialString сохраняет «*»/«#» сервисных кодов и чистит
+  // скобки/пробелы, телефонный аккаунт карты уходит в Telecom Bundle.
+  async function placeCallWithSim(sim) {
     const raw = uiStore.get().dialInput;
     if (!raw) return;
-    // Страховка второго уровня: скобки/пробелы/дефисы не должны доехать
-    // до tel: URI (первый уровень — чистка при вставке из буфера).
-    const number = sanitizePhoneNumber(raw) || raw;
+    const number = sanitizeDialString(raw) || raw;
     if (!number) return;
     const contact = await contactsAdapter.findByNumber(number);
-    telephonyAdapter.call(number, contact);
-  });
+    telephonyAdapter.call(number, contact, sim || null);
+  }
 
   // ===== Клавиатура набора =====
   // Короткий виброотклик клавиш — самый короткий вариант (20 мс),

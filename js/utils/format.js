@@ -54,6 +54,20 @@ export function sanitizePhoneNumber(raw) {
   return (keepPlus ? '+' : '') + digits;
 }
 
+// Строка для исходящего набора: в отличие от sanitizePhoneNumber сохраняет
+// «*» и «#», иначе USSD/сервисные коды (*100#) превращались бы в «100».
+// Скобки, пробелы, дефисы и буквы по-прежнему выкидываются.
+export function sanitizeDialString(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  const body = s.replace(/[^\d*#]/g, '');
+  if (!body) return '';
+  const plusIdx = s.indexOf('+');
+  const firstDigitIdx = s.search(/\d/);
+  const keepPlus = plusIdx !== -1 && (firstDigitIdx === -1 || plusIdx < firstDigitIdx);
+  return (keepPlus ? '+' : '') + body;
+}
+
 export function formatDayLabel(date) {
   const now = new Date();
   const isSameDay = date.toDateString() === now.toDateString();

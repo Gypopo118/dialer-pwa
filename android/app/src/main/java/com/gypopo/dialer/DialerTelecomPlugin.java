@@ -4,16 +4,22 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.NotificationManager;
 import android.app.role.RoleManager;
+import android.content.ComponentName;
 import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.CallLog;
 import android.provider.ContactsContract;
+import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
+import android.telephony.SubscriptionInfo;
+import android.telephony.SubscriptionManager;
+import android.view.HapticFeedbackConstants;
 
 import androidx.activity.result.ActivityResult;
 
@@ -27,6 +33,11 @@ import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
 
 /**
  * Мост между WebView (наш UI) и телефонными службами Android.
@@ -55,12 +66,19 @@ import com.getcapacitor.annotation.PermissionCallback;
 )
 public class DialerTelecomPlugin extends Plugin {
 
+    private static final String PREFS_NAME = "dialer_prefs";
+    private static final String KEY_SELECTED_SIM = "selected_sim_subscription_id";
+
     private static DialerTelecomPlugin instance;
 
     // Номер из внешнего tel:-интента (меню «Открыть с помощью» в браузере),
     // доставленный до загрузки WebView. JS забирает его один раз при старте
     // через getPendingDialNumber().
     private static String pendingDialNumber;
+
+    // Слушатель смены SIM (вставили/вынули лоток, включили/отключили карту,
+    // сменили SIM по умолчанию). Живёт, пока жив плагин.
+    private SubscriptionManager.OnSubscriptionsChangedListener subsListener;
 
     @Override
     public void load() {
@@ -70,6 +88,7 @@ public class DialerTelecomPlugin extends Plugin {
 
     @Override
     protected void handleOnDestroy() {
+        unregisterSubscriptionsListener();
         if (instance == this) {
             instance = null;
             DialerInCallService.setPlugin(null);
@@ -236,8 +255,15 @@ public class DialerTelecomPlugin extends Plugin {
                 call.reject("telecom unavailable");
                 return;
             }
+            // Выбранная карта передаётся ровно тем ключом, который понимает
+            // Telecom: PhoneAccountHandle в Bundle. Слот-индексы не используем.
+            Bundle extras = new Bundle();
+            PhoneAccountHandle handle = resolveSelectedHandle(call, tm);
+            if (handle != null) {
+                extras.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle);
+            }
             Uri uri = Uri.fromParts("tel", number, null);
-            tm.placeCall(uri, new Bundle());
+            tm.placeCall(uri, extras);
             // Датчик сразу: не ждём DIALING/ACTIVE от Telecom.
             DialerInCallService.noteCallStarted();
             JSObject ret = new JSObject();
@@ -248,6 +274,258 @@ public class DialerTelecomPlugin extends Plugin {
         } catch (Exception e) {
             call.reject("placeCall failed: " + e.getMessage());
         }
+    }
+
+    // PhoneAccountHandle из токена, который вернул getSims(). Если токена нет,
+    // пробуем subscriptionId (он не слот-индекс и однозначно указывает карту),
+    // и только потом оставляем выбор системе.
+    private PhoneAccountHandle resolveSelectedHandle(PluginCall call, TelecomManager tm) {
+        PhoneAccountHandle handle = decodePhoneAccount(call.getString("phoneAccountId"));
+        if (handle == null) {
+            Integer subId = call.getInt("subscriptionId");
+            if (subId != null && subId >= 0) {
+                try {
+                    handle = tm.getPhoneAccountHandleForSubscriptionId(subId);
+                } catch (Exception ignored) {
+                    // нет доступа/аккаунта — звонок уйдёт через SIM по умолчанию
+                }
+            }
+        }
+        return handle;
+    }
+
+    // ---------- SIM cards ----------
+
+    // Список активных SIM для умной кнопки вызова: имя оператора, слот и
+    // PhoneAccountHandle. silent=true не поднимает диалог разрешений (нужно
+    // для фонового обновления при возврате в приложение).
+    @PluginMethod
+    public void getSims(PluginCall call) {
+        Boolean requestedSilent = call.getBoolean("silent");
+        boolean silent = requestedSilent != null && requestedSilent;
+        if (getPermissionState("phone") != PermissionState.GRANTED) {
+            if (silent) {
+                call.resolve(emptySimsReply());
+                return;
+            }
+            requestPermissionForAliases(new String[]{"phone"}, call, "onPhonePermsForSims");
+            return;
+        }
+        resolveSims(call);
+    }
+
+    @PermissionCallback
+    private void onPhonePermsForSims(PluginCall call) {
+        if (getPermissionState("phone") == PermissionState.GRANTED) {
+            resolveSims(call);
+        } else {
+            call.resolve(emptySimsReply());
+        }
+    }
+
+    private JSObject emptySimsReply() {
+        JSObject ret = new JSObject();
+        ret.put("sims", new JSArray());
+        ret.put("denied", true);
+        return ret;
+    }
+
+    private void resolveSims(PluginCall call) {
+        ensureSubscriptionsListener();
+        JSObject ret = new JSObject();
+        ret.put("sims", buildSimsArray());
+        call.resolve(ret);
+    }
+
+    private JSArray buildSimsArray() {
+        JSArray arr = new JSArray();
+        try {
+            SubscriptionManager sm = subscriptionManager();
+            TelecomManager tm = (TelecomManager) getContext().getSystemService(Context.TELECOM_SERVICE);
+            if (sm == null) return arr;
+            List<SubscriptionInfo> infos = sm.getActiveSubscriptionInfoList();
+            if (infos == null || infos.isEmpty()) return arr;
+
+            List<SubscriptionInfo> sorted = new ArrayList<>(infos);
+            Collections.sort(sorted, (a, b) -> Integer.compare(a.getSimSlotIndex(), b.getSimSlotIndex()));
+
+            List<PhoneAccountHandle> callAccounts = null;
+            if (tm != null) {
+                try {
+                    callAccounts = tm.getCallCapablePhoneAccounts();
+                } catch (Exception ignored) {
+                    // без READ_PHONE_STATE провайдер может не отдать аккаунты
+                }
+            }
+
+            for (SubscriptionInfo info : sorted) {
+                if (info == null || info.getSimSlotIndex() < 0) continue;
+                JSObject o = new JSObject();
+                o.put("subscriptionId", info.getSubscriptionId());
+                o.put("slotIndex", info.getSimSlotIndex());
+                o.put("name", pickSimName(info));
+
+                PhoneAccountHandle handle = null;
+                if (tm != null) {
+                    try {
+                        handle = tm.getPhoneAccountHandleForSubscriptionId(info.getSubscriptionId());
+                    } catch (Exception ignored) {
+                        // оставляем без handle — звонок уйдёт по выбору системы
+                    }
+                }
+                // Если Telecom вернул список call-capable аккаунтов, а нашего
+                // handle в нём нет — не подсовываем его в placeCall.
+                if (handle != null && callAccounts != null && !callAccounts.isEmpty() && !callAccounts.contains(handle)) {
+                    handle = null;
+                }
+                if (handle != null) {
+                    String encoded = encodePhoneAccount(handle);
+                    if (encoded != null) o.put("phoneAccountId", encoded);
+                }
+                arr.put(o);
+            }
+        } catch (Exception ignored) {
+            // нет разрешения/провайдер недоступен — вернём пустой список
+        }
+        return arr;
+    }
+
+    // displayName (пользовательское имя) важнее carrierName. Служебные
+    // заглушки вроде «CARD 1»/«No service» заменяем на «SIM N» по слоту.
+    private String pickSimName(SubscriptionInfo info) {
+        String display = charSequenceToString(info.getDisplayName());
+        String carrier = charSequenceToString(info.getCarrierName());
+        String name = !display.isEmpty() ? display : carrier;
+        if (isPlaceholderSimName(name)) name = "";
+        if (name.isEmpty()) {
+            int slot = info.getSimSlotIndex();
+            name = "SIM " + (slot >= 0 ? slot + 1 : 1);
+        }
+        return name;
+    }
+
+    private static String charSequenceToString(CharSequence value) {
+        return value == null ? "" : value.toString().trim();
+    }
+
+    private static boolean isPlaceholderSimName(String name) {
+        if (name == null) return true;
+        String n = name.trim().toLowerCase(Locale.ROOT);
+        if (n.isEmpty()) return true;
+        if (n.equals("no service") || n.equals("unknown") || n.equals("android")) return true;
+        return n.matches("^(card|sim)\\s*\\d+$");
+    }
+
+    // PhoneAccountHandle нельзя отдать в JS как объект — сериализуем в
+    // непрозрачный токен и восстанавливаем перед placeCall.
+    private static String encodePhoneAccount(PhoneAccountHandle handle) {
+        try {
+            return handle.getComponentName().flattenToString() + "|" + Uri.encode(handle.getId());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static PhoneAccountHandle decodePhoneAccount(String encoded) {
+        if (encoded == null || encoded.isEmpty()) return null;
+        int sep = encoded.lastIndexOf('|');
+        if (sep <= 0 || sep >= encoded.length() - 1) return null;
+        try {
+            ComponentName cn = ComponentName.unflattenFromString(encoded.substring(0, sep));
+            String id = Uri.decode(encoded.substring(sep + 1));
+            if (cn == null || id == null || id.isEmpty()) return null;
+            return new PhoneAccountHandle(cn, id);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private SubscriptionManager subscriptionManager() {
+        try {
+            return (SubscriptionManager) getContext().getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void ensureSubscriptionsListener() {
+        if (subsListener != null) return;
+        final SubscriptionManager sm = subscriptionManager();
+        if (sm == null) return;
+        final SubscriptionManager.OnSubscriptionsChangedListener listener =
+            new SubscriptionManager.OnSubscriptionsChangedListener() {
+                @Override
+                public void onSubscriptionsChanged() {
+                    JSObject ret = new JSObject();
+                    ret.put("sims", buildSimsArray());
+                    emit("simsChanged", ret);
+                }
+            };
+        subsListener = listener;
+        try {
+            getBridge().executeOnMainThread(() -> {
+                try {
+                    if (subsListener != listener) return; // плагин уже уничтожен
+                    sm.addOnSubscriptionsChangedListener(listener);
+                } catch (Exception e) {
+                    if (subsListener == listener) subsListener = null;
+                }
+            });
+        } catch (Exception e) {
+            subsListener = null;
+        }
+    }
+
+    private void unregisterSubscriptionsListener() {
+        SubscriptionManager.OnSubscriptionsChangedListener listener = subsListener;
+        subsListener = null;
+        if (listener == null) return;
+        try {
+            SubscriptionManager sm = subscriptionManager();
+            if (sm != null) sm.removeOnSubscriptionsChangedListener(listener);
+        } catch (Exception ignored) {
+            // плагин уже отцеплен — чистить нечего
+        }
+    }
+
+    // Выбранная SIM хранится в SharedPreferences (переживает перезапуск
+    // WebView/приложения). JS дублирует её в localStorage для PWA-режима.
+    @PluginMethod
+    public void getSelectedSim(PluginCall call) {
+        SharedPreferences sp = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        JSObject ret = new JSObject();
+        ret.put("subscriptionId", sp.getInt(KEY_SELECTED_SIM, -1));
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void setSelectedSim(PluginCall call) {
+        Integer value = call.getInt("subscriptionId");
+        int id = value != null ? value : -1;
+        SharedPreferences sp = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        sp.edit().putInt(KEY_SELECTED_SIM, id).apply();
+        call.resolve();
+    }
+
+    // Лёгкий тактильный щелчок при пересечении порога свайпа SIM.
+    // CLOCK_TICK — системный tick, не требующий VIBRATE.
+    @PluginMethod
+    public void hapticTick(PluginCall call) {
+        Activity activity = getActivity();
+        if (activity == null) {
+            call.reject("no activity");
+            return;
+        }
+        activity.runOnUiThread(() -> {
+            try {
+                getBridge().getWebView().performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                JSObject ret = new JSObject();
+                ret.put("ok", true);
+                call.resolve(ret);
+            } catch (Exception e) {
+                call.reject("haptic failed: " + e.getMessage());
+            }
+        });
     }
 
     // ---------- in-call control (делегируется активному InCallService) ----------
