@@ -348,6 +348,13 @@
   0%, 55% { opacity: 1; }
   56%, 100% { opacity: 0; }
 }
+/* base.css в режиме «Убрать анимации» (Android 9+, есть в MIUI/Xiaomi)
+   ставит всем animation-duration: 1ms !important — каретка начинает
+   мигать с частотой кадров и выглядит как дрожащая полоса. Курсор ввода —
+   не декоративная анимация, поэтому возвращаем ему штатные 1.1s. */
+@media (prefers-reduced-motion: reduce) {
+  .dial-caret { animation-duration: 1.1s !important; }
+}
 .backspace-btn {
   position: absolute;
   right: 0;
