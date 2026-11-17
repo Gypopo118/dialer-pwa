@@ -117,16 +117,15 @@ window.addEventListener('dialer:add-contact-blank', (e) => {
   });
 });
 
-// Возврат из системного редактора контактов: обновить списки.
-// Это и есть «автоопрос» — свежие данные при каждом возврате в приложение.
+// Возврат в приложение: обновить списки. Сюда же попадает возврат из
+// системных настроек после выдачи READ_CALL_LOG/READ_CONTACTS — иначе
+// история оставалась пустой до перезапуска. Пакета @capacitor/app в сборке
+// нет, поэтому слушаем appResume нашего DialerTelecomPlugin
+// (эмитится в handleOnResume).
 (async function initResumeRefresh() {
   try {
-    const cap = window.Capacitor;
-    if (!cap || typeof cap.isNativePlatform !== 'function' || !cap.isNativePlatform()) return;
-    const App = (cap.Plugins && cap.Plugins.App)
-      || (typeof cap.registerPlugin === 'function' ? cap.registerPlugin('App') : null);
-    if (!App || typeof App.addListener !== 'function') return;
-    await App.addListener('resume', () => {
+    if (!(await nativeBridge.isAvailable())) return;
+    await nativeBridge.onAppResume(() => {
       contactsAdapter.refreshCache();
       home.refreshRecents();
       contactHistoryScreen.refresh();

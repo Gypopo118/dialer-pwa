@@ -6,5 +6,9 @@
   "android": {
     "allowMixedContent": false
   },
-  "plugins": {}
+  "plugins": {
+    "SystemBars": {
+      "style": "DARK"
+    }
+  }
 }

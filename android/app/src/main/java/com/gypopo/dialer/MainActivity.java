@@ -1,14 +1,19 @@
 package com.gypopo.dialer;
 
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Window;
 import android.webkit.WebView;
 
 import androidx.activity.OnBackPressedCallback;
+import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -27,6 +32,7 @@ public class MainActivity extends BridgeActivity {
             setShowWhenLocked(true);
             setTurnScreenOn(true);
         }
+        applyDarkSystemBars();
         watchImeDismiss();
         // Номер из меню «Открыть с помощью» (tel:-intent из браузера).
         // Холодный старт: WebView ещё не загружен, слушать событие некому —
@@ -82,6 +88,38 @@ public class MainActivity extends BridgeActivity {
                 }
             }
         });
+    }
+
+    // Приложение всегда в тёмной палитре, независимо от темы телефона.
+    // Иконки системных панелей — светлые; на Android 10–14 сами панели
+    // окрашиваются в цвет окна. На Android 15+ панель навигации при трёх
+    // кнопках берёт цвет из windowBackground (styles.xml), а contrast
+    // enforcement мог рисовать поверх неё светлую вуаль — выключаем его.
+    @SuppressWarnings("deprecation")
+    private void applyDarkSystemBars() {
+        Window window = getWindow();
+        WindowInsetsControllerCompat controller =
+            WindowCompat.getInsetsController(window, window.getDecorView());
+        if (controller != null) {
+            controller.setAppearanceLightStatusBars(false);
+            controller.setAppearanceLightNavigationBars(false);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.setNavigationBarContrastEnforced(false);
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            int color = ContextCompat.getColor(this, R.color.dialer_background);
+            window.setNavigationBarColor(color);
+            window.setStatusBarColor(color);
+        }
+    }
+
+    // Смена темы/ориентации на лету: Capacitor SystemBars пересчитывает
+    // стиль панелей, поэтому тёмный вариант применяем ещё раз последним.
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        applyDarkSystemBars();
     }
 
     // Тёплый старт (launchMode="singleTask", приложение свёрнуто): Android

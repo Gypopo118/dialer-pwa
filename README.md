@@ -71,6 +71,7 @@ js/
     call-screen.js              — входящий/исходящий/активный звонок
   components/
     context-menu.js             — bottom sheet: копировать/добавить/изменить/блок/история
+    sim-call-button.js          — умная капсула вызова: две SIM, свайп, карусель
   utils/
     format.js                   — форматирование номеров, времени, длительности
     icons.js                    — инлайн SVG-иконки

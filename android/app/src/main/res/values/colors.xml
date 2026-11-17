@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Фон окна и системных панелей. Совпадает с нижней точкой градиента
+         CSS (#0A0B0E): в Android 15+ панель навигации при 3 кнопках берёт
+         цвет из windowBackground, поэтому он должен быть тёмным. -->
+    <color name="dialer_background">#0A0B0E</color>
+</resources>

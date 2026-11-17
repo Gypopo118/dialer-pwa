@@ -292,7 +292,9 @@
   font-weight: 400;
   letter-spacing: 1px;
   color: var(--text-primary);
-  caret-color: var(--accent-call);
+  /* В поле рисуется своя белая каретка .dial-caret. Нативную скрываем:
+     иначе из-под белой выглядывает её зелёная полоска (caret-color). */
+  caret-color: transparent;
   user-select: text;
   -webkit-user-select: text;
 }
@@ -345,6 +347,13 @@
 @keyframes dial-caret-blink {
   0%, 55% { opacity: 1; }
   56%, 100% { opacity: 0; }
+}
+/* base.css в режиме «Убрать анимации» (Android 9+, есть в MIUI/Xiaomi)
+   ставит всем animation-duration: 1ms !important — каретка начинает
+   мигать с частотой кадров и выглядит как дрожащая полоса. Курсор ввода —
+   не декоративная анимация, поэтому возвращаем ему штатные 1.1s. */
+@media (prefers-reduced-motion: reduce) {
+  .dial-caret { animation-duration: 1.1s !important; }
 }
 .backspace-btn {
   position: absolute;
@@ -451,6 +460,8 @@
 .call-btn {
   grid-column: 1 / 4;
   grid-row: 5;
+  position: relative;
+  overflow: hidden;
   border-radius: var(--radius-key);
   /* Спокойный глубокий изумруд: один тон при пустом и заполненном поле */
   background: linear-gradient(180deg, var(--call-btn-top) 0%, var(--call-btn) 100%);
@@ -459,18 +470,66 @@
   align-items: center;
   justify-content: center;
   color: #FFFFFF;
-  touch-action: manipulation;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.call-btn:active {
-  background: var(--call-btn-pressed);
-  transform: translateY(1px);
+.call-btn[aria-disabled="true"] { cursor: default; }
+.call-btn__single {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
-.call-btn svg { width: 24px; height: 24px; }
-/* Пустое поле: кнопка не нажимается, но цвет и яркость не меняются —
-   трубка остаётся белой, как и цифры. */
-.call-btn[disabled] {
-  pointer-events: none;
+.call-btn__single svg { width: 24px; height: 24px; }
+
+/* Карусель двух SIM: три панели (соседняя слева, текущая, соседняя справа)
+   внутри клипа капсулы. Граница между заливками — чёткая кромка панелей,
+   без смешивания оттенков. */
+.call-btn__viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
 }
+.call-btn__track {
+  display: flex;
+  width: 300%;
+  height: 100%;
+  will-change: transform;
+}
+.call-btn__panel {
+  flex: 0 0 33.3333%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.call-btn__panel--green {
+  background: linear-gradient(180deg, var(--call-btn-top) 0%, var(--call-btn) 100%);
+}
+.call-btn__panel--orange {
+  background: linear-gradient(180deg, var(--call-btn2-top) 0%, var(--call-btn2) 100%);
+}
+.call-btn__phone { display: inline-flex; flex-shrink: 0; }
+.call-btn__phone svg { width: 22px; height: 22px; }
+.call-btn__arrow { display: inline-flex; flex-shrink: 0; opacity: 0.7; }
+.call-btn__arrow svg { width: 14px; height: 14px; }
+.call-btn__name {
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+.call-btn--dragging { cursor: grabbing; }
 
 .search-btn {
   grid-column: 4 / 5;

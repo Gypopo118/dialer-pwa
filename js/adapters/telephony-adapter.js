@@ -28,7 +28,7 @@ import { callLogAdapter } from './call-log-adapter.js';
 import { contactsAdapter } from './contacts-adapter.js';
 import { nativeBridge } from './native-bridge.js';
 import { blockedStore } from '../blocked-store.js';
-import { sanitizePhoneNumber } from '../utils/format.js';
+import { sanitizeDialString } from '../utils/format.js';
 
 const listeners = new Set();
 
@@ -219,14 +219,20 @@ export const telephonyAdapter = {
   },
 
   // Реальный вызов в APK: TelecomManager.placeCall() через нативный плагин.
+  // sim — выбранная в умной кнопке карта: её PhoneAccountHandle уходит в
+  // Bundle, чтобы Telecom не спрашивал SIM и не брал карту по умолчанию.
   // Мок-ветка ниже используется только в браузере (PWA).
-  async call(number, contact = null) {
+  async call(number, contact = null, sim = null) {
     // Финальная чистка перед tel: URI: скобки/пробелы/дефисы из вставки
-    // или ручного ввода не должны ломать placeCall.
-    number = sanitizePhoneNumber(number) || number;
+    // или ручного ввода не должны ломать placeCall. «*» и «#» сохраняем —
+    // иначе USSD/сервисные коды (*100#) теряли бы звонок.
+    number = sanitizeDialString(number) || number;
     if (isNative()) {
       try {
-        await nativeBridge.placeCall(number);
+        await nativeBridge.placeCall(number, {
+          phoneAccountId: sim?.phoneAccountId || '',
+          subscriptionId: sim?.subscriptionId ?? -1,
+        });
       } catch (err) {
         console.warn('[telephony] placeCall failed:', err);
         return; // Экран не показываем: вызов не создан, висеть нечему.

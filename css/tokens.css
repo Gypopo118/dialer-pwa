@@ -31,6 +31,10 @@
   --call-btn-top: #1B7A4B;
   --call-btn: #187246;
   --call-btn-pressed: #14603A;
+  /* Вторая SIM: тот же уровень яркости, что у зелёной (L* ≈ 0.13) */
+  --call-btn2-top: #A2571C;
+  --call-btn2: #9A531A;
+  --call-btn2-pressed: #854614;
   --search-btn-top: #3068B8;
   --search-btn: #2B5FA8;
   --search-btn-pressed: #24508F;
