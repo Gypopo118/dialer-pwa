@@ -411,9 +411,9 @@ export function initHomeScreen({ contextMenu }) {
   }
 
   // ===== Клавиатура набора =====
-  // Короткий виброотклик клавиш — самый короткий вариант (20 мс),
-  // тот же, что и при долгом нажатии «0».
-  function vibrateKeyFeedback() {
+  // Вибрация осталась только у долгого нажатия «0» — момента, когда ноль
+  // превращается в «+». Обычные нажатия цифр идут без тактильного отклика.
+  function vibrateZeroLongPress() {
     if (navigator.vibrate) { try { navigator.vibrate(20); } catch (_) { /* noop */ } }
   }
 
@@ -455,7 +455,7 @@ export function initHomeScreen({ contextMenu }) {
       zeroIndex = index;
       zeroTimer = setTimeout(() => {
         zeroTimer = null;
-        vibrateKeyFeedback();
+        vibrateZeroLongPress();
         const cur = uiStore.get().dialInput || '';
         if (zeroIndex >= 0 && cur[zeroIndex] === '0') {
           uiStore.set({ dialInput: cur.slice(0, zeroIndex) + '+' + cur.slice(zeroIndex + 1) });
@@ -501,13 +501,12 @@ export function initHomeScreen({ contextMenu }) {
     zeroKey.addEventListener('pointerup', cancelZeroLongPress);
     zeroKey.addEventListener('pointercancel', cancelZeroLongPress);
 
-    // Отклик нажатия любой клавиши, как в штатной клавиатуре Google:
-    // вибрация в момент касания + корпус клавиши быстро светлеет до
-    // светло-серого, а после отпускания плавно гаснет обратно.
+    // Отклик нажатия клавиши, как в штатной клавиатуре Google: корпус
+    // быстро светлеет до светло-серого, а после отпускания плавно гаснет.
+    // Вибрации здесь нет — она осталась только у долгого нажатия «0».
     keypadEl.querySelectorAll('.key').forEach((key) => {
       const unlit = () => key.classList.remove('key--lit');
       key.addEventListener('pointerdown', () => {
-        vibrateKeyFeedback();
         key.classList.add('key--lit');
       }, { passive: true });
       key.addEventListener('pointerup', unlit, { passive: true });
